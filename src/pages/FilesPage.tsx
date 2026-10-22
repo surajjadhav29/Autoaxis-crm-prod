@@ -681,7 +681,7 @@ export default function FilesPage() {
       {filtersOpen ? (
         <button
           type="button"
-          className="crm-billing-filter-backdrop print:hidden md:hidden"
+          className="crm-billing-filter-backdrop print:hidden"
           onClick={() => setFiltersOpen(false)}
           aria-label="Close filters"
         />
@@ -734,10 +734,10 @@ export default function FilesPage() {
             <button
               type="button"
               className={`crm-btn crm-btn--filters ${drawerFilterCount || filtersOpen ? 'crm-btn--filters-active' : ''}`}
-              onClick={() => setFiltersOpen(true)}
+              onClick={() => setFiltersOpen((open) => !open)}
             >
               <SlidersHorizontal size={16} strokeWidth={1.75} />
-              Filters
+              {filtersOpen ? 'Close filters' : 'Filters'}
               {drawerFilterCount ? <span className="crm-filter-count">{drawerFilterCount}</span> : null}
             </button>
 

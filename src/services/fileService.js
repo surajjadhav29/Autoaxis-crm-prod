@@ -1,5 +1,6 @@
 import api from '../lib/api';
 import { clientName, FILE_STATUSES } from '../lib/constants';
+import { uniqueDealerDisplayNames } from '../lib/dealerNameKey';
 import { WORK_TYPE_DOCUMENTS } from '../lib/workTypeDocuments';
 
 /** Must match crm-backend file.service.js MAX_UNPAGINATED_FILES */
@@ -18,7 +19,7 @@ export async function fetchDealerNames(user, { filterUserId } = {}) {
   const params = {};
   if (user.role === 'superadmin' && filterUserId) params.userId = filterUserId;
   const { data } = await api.get('/files/dealers', { params });
-  return data.dealers || [];
+  return uniqueDealerDisplayNames(data.dealers || []);
 }
 
 function asFilterList(value) {

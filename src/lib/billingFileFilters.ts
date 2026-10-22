@@ -28,6 +28,9 @@ export function billingDateFilterLabel(filters: BillingPickFileFilters): string 
 /** Default page size for billing file pick (BE max 200 per page). */
 export const BILLING_FILES_PAGE_SIZE = 50;
 
+/** Must match crm-backend dealerInvoiceFiles BILLING_FILES_PAGE_SIZE_MAX */
+export const BILLING_FILES_PAGE_SIZE_MAX = 200;
+
 export type BillingFilesRequestPayload = {
   page?: number;
   pageSize?: number;

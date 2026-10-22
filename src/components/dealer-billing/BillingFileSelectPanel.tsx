@@ -7,12 +7,12 @@ import type { User } from '@/types/user.types';
 import type { FileFilterDraft } from '@/types/file.types';
 import FilesFilterDrawer from '../files/FilesFilterDrawer';
 import FileTable from '../FileTable';
-import Pagination from '../Pagination';
 import {
   billingDrawerFilterCount,
   billingFiltersToFileFilterDraft,
   buildBillingDrawerAppliedChips,
 } from '@/lib/billingFileFilters';
+import { areAllBillableFilesSelected } from '@/lib/billingFileSelection';
 
 interface BillingFileSelectPanelProps {
   dealer: DealerRegistryRecord;
@@ -21,15 +21,6 @@ interface BillingFileSelectPanelProps {
   selectedIds: Set<string>;
   selectedCount: number;
   billableTotal: number;
-  filesTotal: number;
-  filesPage: number;
-  filesTotalPages: number;
-  filesPageSize: number;
-  filesLoadingMore?: boolean;
-  onFilesPageChange: (page: number) => void;
-  onFilesPageSizeChange: (size: number) => void;
-  hasMoreFiles?: boolean;
-  onLoadMoreFiles?: () => void;
   filters: BillingPickFileFilters;
   filtersOpen: boolean;
   isAdmin: boolean;
@@ -45,6 +36,7 @@ interface BillingFileSelectPanelProps {
   onToggle: (fileId: string) => void;
   onToggleAll: (checked: boolean) => void;
   onSelectAllBillable: () => void;
+  onClearSelection: () => void;
 }
 
 export default function BillingFileSelectPanel({
@@ -54,15 +46,6 @@ export default function BillingFileSelectPanel({
   selectedIds,
   selectedCount,
   billableTotal,
-  filesTotal,
-  filesPage,
-  filesTotalPages,
-  filesPageSize,
-  filesLoadingMore = false,
-  onFilesPageChange,
-  onFilesPageSizeChange,
-  hasMoreFiles = false,
-  onLoadMoreFiles,
   filters,
   filtersOpen,
   isAdmin,
@@ -78,6 +61,7 @@ export default function BillingFileSelectPanel({
   onToggle,
   onToggleAll,
   onSelectAllBillable,
+  onClearSelection,
 }: BillingFileSelectPanelProps) {
   const drawerFilterCount = billingDrawerFilterCount(filters, isAdmin);
   const selectedList = Array.from(selectedIds);
@@ -105,8 +89,8 @@ export default function BillingFileSelectPanel({
   });
 
   const toggleSelectAll = () => {
-    const allSelected = files.length > 0 && files.every((f) => selectedIds.has(f.id));
-    onToggleAll(!allSelected);
+    const allBillableSelected = areAllBillableFilesSelected(files, selectedIds);
+    onToggleAll(!allBillableSelected);
   };
 
   return (
@@ -161,8 +145,9 @@ export default function BillingFileSelectPanel({
                 className="crm-btn crm-btn--secondary crm-btn--compact crm-billing-select-all-btn"
                 disabled={loading}
                 onClick={onSelectAllBillable}
+                title={`Select all ${billableTotal} billable files matching current filters`}
               >
-                All ({billableTotal})
+                Select all ({billableTotal})
               </button>
             ) : null}
             <button
@@ -179,6 +164,26 @@ export default function BillingFileSelectPanel({
           </div>
         </div>
 
+        <div className="crm-billing-dealer-subrow print:hidden">
+          <p className="crm-billing-dealer-subrow-text">
+            <strong className="crm-billing-selection-count">{selectedCount}</strong>
+            {' of '}
+            <strong>{billableTotal}</strong>
+            {' billable '}
+            {billableTotal === 1 ? 'file' : 'files'}
+            {' selected for invoice'}
+          </p>
+          {selectedCount > 0 ? (
+            <button
+              type="button"
+              className="crm-billing-dealer-subrow-clear"
+              onClick={onClearSelection}
+            >
+              Clear selection
+            </button>
+          ) : null}
+        </div>
+
         <div className="figma-table-card crm-billing-files-table-card">
           <FileTable
             mode="billing"
@@ -192,25 +197,7 @@ export default function BillingFileSelectPanel({
             emptyTitle="No unpaid files"
             emptyDescription="Try different filters or pick another dealer. Paid and paper-return files are excluded from billing."
             emptyIllustration="search"
-            hasMore={hasMoreFiles}
-            loadingMore={filesLoadingMore}
-            onLoadMore={onLoadMoreFiles}
           />
-          {!loading && filesTotal > 0 ? (
-            <div className="crm-billing-files-pagination hidden lg:block print:hidden">
-              <Pagination
-                currentPage={filesPage}
-                totalPages={filesTotalPages}
-                onPageChange={onFilesPageChange}
-                pageSize={filesPageSize}
-                pageSizeOptions={[8, 10, 20, 50]}
-                onPageSizeChange={(size) => {
-                  onFilesPageChange(1);
-                  onFilesPageSizeChange(size);
-                }}
-              />
-            </div>
-          ) : null}
         </div>
       </div>
 

@@ -1819,6 +1819,10 @@ body {
     align-items: stretch;
 }
 
+.crm-files-split--open {
+    position: relative;
+}
+
 .crm-files-main {
     display: flex;
     flex: 1;
@@ -2384,11 +2388,16 @@ body {
 
 .crm-filter-drawer-head {
     display: flex;
+    flex-shrink: 0;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
     padding: 18px 24px;
     border-bottom: 1px solid #eeeeee;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #ffffff;
 }
 
 .crm-filter-drawer-title {
@@ -2404,19 +2413,33 @@ body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
     padding: 0;
-    border: 0;
-    border-radius: 4px;
-    background: transparent;
-    color: #8b919a;
+    border: 1px solid #d8dde5;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #3d4654;
     cursor: pointer;
+    flex-shrink: 0;
 }
 
 .crm-filter-drawer-close:hover {
     background: #f5f6f7;
     color: #1a2332;
+    border-color: #c5cad3;
+}
+
+.crm-filter-drawer-applied-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.crm-filter-drawer-close--inline {
+    width: 34px;
+    height: 34px;
 }
 
 .crm-filter-drawer-body {
@@ -2468,8 +2491,14 @@ body {
     width: min(380px, 94vw);
     min-height: 0;
     flex: none;
-    z-index: 6;
+    z-index: 30;
     box-shadow: -10px 0 40px rgba(17, 24, 39, 0.14);
+}
+
+.crm-page--files .crm-files-split--open .crm-billing-filter-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
 }
 
 .crm-filter-drawer--billing {
@@ -2494,9 +2523,8 @@ body {
 }
 
 .crm-filter-drawer--billing .crm-filter-drawer-close {
-    width: 36px;
-    height: 36px;
-    border-radius: 8px;
+    width: 34px;
+    height: 34px;
 }
 
 .crm-filter-drawer--billing .crm-filter-section {
@@ -3646,6 +3674,20 @@ body {
     color: #1e242c;
     outline: none;
     font-family: inherit;
+}
+
+/* Custom .crm-search-clear is used — hide browser cancel on type="search". */
+.crm-search::-webkit-search-cancel-button,
+.crm-search::-webkit-search-decoration {
+    -webkit-appearance: none;
+    appearance: none;
+    display: none;
+}
+
+.crm-search::-ms-clear {
+    display: none;
+    width: 0;
+    height: 0;
 }
 
 .crm-search:focus {
@@ -8554,6 +8596,26 @@ body {
     line-height: 1.45;
     color: #667488;
     min-width: 0;
+}
+
+.crm-billing-selection-count {
+    color: #1a2332;
+    font-weight: 700;
+}
+
+.crm-billing-dealer-subrow-clear {
+    flex-shrink: 0;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: #1a73e8;
+    cursor: pointer;
+}
+
+.crm-billing-dealer-subrow-clear:hover {
+    text-decoration: underline;
 }
 
 .crm-billing-dealer-layout .crm-page-head-row .crm-title {

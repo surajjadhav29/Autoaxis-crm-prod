@@ -358,11 +358,11 @@ export default function FilesFilterDrawer({
       </header>
 
       <div className="crm-filter-drawer-body">
-          {invoiceUi ? (
+          {invoiceUi && appliedFilterChips.length > 0 ? (
             <div className="crm-filter-drawer-applied">
               <div className="crm-filter-drawer-applied-head">
                 <span className="crm-filter-drawer-applied-title">Selected filters</span>
-                {appliedFilterChips.length && onClearAppliedFilters ? (
+                {onClearAppliedFilters ? (
                   <button
                     type="button"
                     className="crm-filter-drawer-applied-clear"
@@ -372,25 +372,21 @@ export default function FilesFilterDrawer({
                   </button>
                 ) : null}
               </div>
-              {appliedFilterChips.length ? (
-                <div className="crm-filter-drawer-applied-chips">
-                  {appliedFilterChips.map((chip) => (
-                    <span key={chip.key} className="crm-filter-chip crm-filter-chip--drawer">
-                      {chip.label}
-                      <button
-                        type="button"
-                        className="crm-filter-chip-remove"
-                        onClick={chip.onRemove}
-                        aria-label={`Remove ${chip.label}`}
-                      >
-                        <X size={12} />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <p className="crm-filter-drawer-applied-empty">No filters selected yet.</p>
-              )}
+              <div className="crm-filter-drawer-applied-chips">
+                {appliedFilterChips.map((chip) => (
+                  <span key={chip.key} className="crm-filter-chip crm-filter-chip--drawer">
+                    {chip.label}
+                    <button
+                      type="button"
+                      className="crm-filter-chip-remove"
+                      onClick={chip.onRemove}
+                      aria-label={`Remove ${chip.label}`}
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
             </div>
           ) : null}
 
