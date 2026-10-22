@@ -102,16 +102,15 @@ export default function DealerProfileFormDrawer({
                       />
                     </div>
                     <div className="flex flex-col gap-1.5">
-                      <FieldLabel htmlFor="dealer-email">Email *</FieldLabel>
+                      <FieldLabel htmlFor="dealer-email">Email</FieldLabel>
                       <input
                         id="dealer-email"
                         name="email"
                         type="email"
                         className={inputClass}
-                        placeholder="dealer@example.com"
+                        placeholder="dealer@example.com (optional)"
                         value={form.email}
                         onChange={(e) => onChange({ email: e.target.value })}
-                        required
                       />
                     </div>
                     <div className="flex flex-col gap-1.5">
