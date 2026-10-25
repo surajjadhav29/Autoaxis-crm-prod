@@ -4,6 +4,7 @@ export interface FieldAgent {
   mobile: string;
   description?: string;
   rtoName: string;
+  /** @deprecated Legacy office address — no longer edited in UI */
   address?: string;
   /** @deprecated Legacy — use rtoName */
   district?: string;
@@ -17,6 +18,5 @@ export interface FieldAgent {
 export interface FieldAgentOffice {
   id: string;
   rtoName: string;
-  address: string;
   agents: FieldAgent[];
 }

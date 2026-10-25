@@ -56,15 +56,11 @@ export function groupFieldAgentsByRto(agents) {
       map.set(key, {
         id: agent.id,
         rtoName: fieldAgentRtoLabel(agent),
-        address: String(agent.address || '').trim(),
         agents: [],
       });
     }
     const office = map.get(key);
     office.agents.push(agent);
-    if (!office.address && agent.address) {
-      office.address = String(agent.address).trim();
-    }
   }
   const offices = [...map.values()];
   for (const office of offices) {
@@ -130,10 +126,9 @@ export async function fetchFieldAgents({ activeOnly = false, search = '' } = {})
   throw lastError;
 }
 
-export async function createFieldAgentOffice({ rtoName, address, agent1, agent2 }) {
+export async function createFieldAgentOffice({ rtoName, agent1, agent2 }) {
   const body = {
     rtoName,
-    address,
     agent1,
   };
   if (agent2?.name) body.agent2 = agent2;
@@ -141,10 +136,9 @@ export async function createFieldAgentOffice({ rtoName, address, agent1, agent2 
   return data.office || data;
 }
 
-export async function updateFieldAgentOffice({ rtoName, address, agent1, agent2, agentIds }) {
+export async function updateFieldAgentOffice({ rtoName, agent1, agent2, agentIds }) {
   const body = {
     rtoName,
-    address,
     agent1,
     agentIds,
   };

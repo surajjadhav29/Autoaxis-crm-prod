@@ -105,9 +105,6 @@ export default function FieldAgentTable({
               <FigmaCell variant="fieldagentdesc">
                 <FigmaSortHeader label="Description 2" sortable={false} />
               </FigmaCell>
-              <FigmaCell variant="fieldagentaddress">
-                <FigmaSortHeader label="Address" sortable={false} />
-              </FigmaCell>
               <FigmaCell variant="fieldagentactions">
                 <FigmaSortHeader label="Actions" sortable={false} />
               </FigmaCell>
@@ -153,14 +150,6 @@ export default function FieldAgentTable({
                       title={a2?.description?.trim() || undefined}
                     >
                       {a2?.description?.trim() || '—'}
-                    </span>
-                  </FigmaCell>
-                  <FigmaCell variant="fieldagentaddress">
-                    <span
-                      className="figma-td-text text-[#667488]"
-                      title={office.address?.trim() || undefined}
-                    >
-                      {office.address?.trim() || '—'}
                     </span>
                   </FigmaCell>
                   <FigmaCell variant="fieldagentactions">
@@ -216,11 +205,6 @@ export default function FieldAgentTable({
                         {[a2.name, a2.mobile || null, a2.description?.trim() || null]
                           .filter(Boolean)
                           .join(' · ')}
-                      </p>
-                    ) : null}
-                    {office.address?.trim() ? (
-                      <p className="crm-staff-card-email m-0 mt-1 whitespace-pre-line text-[#667488]">
-                        {office.address.trim()}
                       </p>
                     ) : null}
                   </div>

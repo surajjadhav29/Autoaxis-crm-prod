@@ -26,7 +26,6 @@ interface FieldAgentForm {
   mobile2: string;
   description2: string;
   rtoName: string;
-  address: string;
 }
 
 const FORM_ANIM_MS = 320;
@@ -40,7 +39,6 @@ const emptyForm: FieldAgentForm = {
   mobile2: '',
   description2: '',
   rtoName: '',
-  address: '',
 };
 
 const inputClass =
@@ -186,7 +184,6 @@ export default function FieldAgentsPage() {
       mobile2: a2?.mobile || '',
       description2: a2?.description || '',
       rtoName: office.rtoName || '',
-      address: office.address || '',
     });
     setFormError('');
     setFormSuccess(false);
@@ -204,7 +201,6 @@ export default function FieldAgentsPage() {
     const mobile2 = form.mobile2.replace(/\D/g, '').slice(-10);
     const description2 = form.description2.trim();
     const rtoName = form.rtoName.trim();
-    const address = form.address.trim();
 
     if (!name || !rtoName) {
       setFormError('Field Agent 1 name and RTO are required.');
@@ -245,14 +241,13 @@ export default function FieldAgentsPage() {
       if (isEditing) {
         await updateFieldAgentOffice({
           rtoName,
-          address,
           agent1,
           agent2,
           agentIds: editingAgentIds,
         });
         showToast('Field agent entry updated');
       } else {
-        await createFieldAgentOffice({ rtoName, address, agent1, agent2 });
+        await createFieldAgentOffice({ rtoName, agent1, agent2 });
         showToast(wantSecond ? 'Field agent entry created (2 agents)' : 'Field agent entry created');
       }
       setFormSuccess(true);
@@ -347,20 +342,6 @@ export default function FieldAgentsPage() {
                               Mobile and description are optional for both.
                             </p>
                           )}
-                        </div>
-
-                        <div className="flex flex-col gap-1.5 sm:col-span-2">
-                          <label className="text-[13px] font-medium text-[#3d4654]">Address</label>
-                          <textarea
-                            name="address"
-                            className={`${inputClass} min-h-[88px] resize-y py-2.5`}
-                            placeholder="Office / meeting point (optional)"
-                            rows={3}
-                            value={form.address}
-                            onChange={(e) =>
-                              setForm((prev) => ({ ...prev, address: e.target.value }))
-                            }
-                          />
                         </div>
 
                         <div className="flex flex-col gap-1.5">

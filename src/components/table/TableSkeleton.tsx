@@ -50,11 +50,10 @@ const COLUMN_SETS: Record<SkeletonVariant, FigmaCellVariant[]> = {
   staff: ['staffname', 'staffemail', 'staffuser', 'staffstatus', 'staffdate', 'stafflogin', 'staffactions'],
   worktypes: ['worktypename', 'worktypedocs', 'worktypeactions'],
   fieldagents: [
+    'fieldagentrto',
     'fieldagentname',
     'fieldagentmobile',
     'fieldagentdesc',
-    'fieldagentrto',
-    'fieldagentaddress',
     'fieldagentactions',
   ],
   cards: ['client', 'filestatus'],
