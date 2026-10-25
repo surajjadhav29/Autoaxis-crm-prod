@@ -107,10 +107,10 @@ export default function DealerDirectoryTable({
                   </span>
                 </FigmaCell>
                 <FigmaCell variant="staffemail">
-                  <span className="figma-td-text">{item.email}</span>
+                  <span className="figma-td-text">{item.email || '—'}</span>
                 </FigmaCell>
                 <FigmaCell variant="staffuser">
-                  <span className="figma-td-text">{item.phone}</span>
+                  <span className="figma-td-text">{item.phone || '—'}</span>
                 </FigmaCell>
                 <FigmaCell variant="staffstatus">
                   <span className="figma-td-text" style={{ color: '#667488' }}>

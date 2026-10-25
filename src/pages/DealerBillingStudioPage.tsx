@@ -24,12 +24,17 @@ import { CrmWhatsAppIcon } from '@/components/icons/CrmIcons';
 import { getApiError } from '../lib/apiError';
 import {
   billingFiltersToApiPayload,
+<<<<<<< HEAD
   normalizeBillingDateRange,
 } from '../lib/billingFileFilters';
 import { useIsMobileList } from '../hooks/useIsMobileList';
 import { updateFileExpenses } from '../services/fileService';
 
 const BILLING_FILES_PAGE_SIZE_OPTIONS = [8, 10, 20, 50];
+=======
+  BILLING_FILES_PAGE_SIZE_MAX,
+} from '../lib/billingFileFilters';
+>>>>>>> 32693cab7b9956e6a71c81e09d2970768c4b9f06
 import { isBillableForInvoice } from '../lib/billingFileSelection';
 import { billingLineFromFileRecord } from '../lib/fileExpenseSplit';
 import type { DealerRegistryRecord } from '@/types/dealer.types';
@@ -81,7 +86,6 @@ function draftFromFileFilter(draft: FileFilterDraft, search = ''): BillingPickFi
 export default function DealerBillingStudioPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'superadmin';
-  const isMobileList = useIsMobileList();
   const { toast, showToast, clearToast } = useToast();
 
   const [step, setStep] = useState<BillingWizardStep>(1);
@@ -91,11 +95,6 @@ export default function DealerBillingStudioPage() {
   const [selectedDealer, setSelectedDealer] = useState<DealerRegistryRecord | null>(null);
 
   const [dealerFiles, setDealerFiles] = useState<FileRecord[]>([]);
-  const [filesPage, setFilesPage] = useState(1);
-  const [filesPageSize, setFilesPageSize] = useState(BILLING_FILES_PAGE_SIZE_OPTIONS[0]);
-  const [filesLoadingMore, setFilesLoadingMore] = useState(false);
-  const [filesTotalPages, setFilesTotalPages] = useState(1);
-  const [filesTotal, setFilesTotal] = useState(0);
   const [billableTotal, setBillableTotal] = useState(0);
   const [invoiceLineFiles, setInvoiceLineFiles] = useState<FileRecord[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
@@ -109,7 +108,6 @@ export default function DealerBillingStudioPage() {
   const [sharingWhatsApp, setSharingWhatsApp] = useState(false);
   const [dealerStepLoading, setDealerStepLoading] = useState(false);
   const filesRequestRef = useRef<AbortController | null>(null);
-  const filesLoadMoreLock = useRef(false);
   const activeInvoiceIdRef = useRef<string | null>(null);
   const persistNewInvoiceRef = useRef<Promise<BillingDraft> | null>(null);
 
@@ -192,61 +190,62 @@ export default function DealerBillingStudioPage() {
   );
 
   const loadDealerFiles = useCallback(
-    async (
-      dealer: DealerRegistryRecord,
-      filters: BillingPickFileFilters,
-      page: number,
-      pageSize: number,
-      append: boolean
-    ) => {
+    async (dealer: DealerRegistryRecord, filters: BillingPickFileFilters) => {
       filesRequestRef.current?.abort();
       const controller = new AbortController();
       filesRequestRef.current = controller;
 
-      if (append) {
-        setFilesLoadingMore(true);
-      } else {
-        setFilesLoading(true);
-        setFilesLoadingMore(false);
-        filesLoadMoreLock.current = false;
-      }
+      setFilesLoading(true);
       try {
-        const body = billingFiltersToApiPayload(filters, {
-          page,
-          pageSize,
-        });
-        const result = await fetchDealerBillingFilePage(dealer.id, {
-          signal: controller.signal,
-          body,
-        });
-        if (controller.signal.aborted) return;
-        setDealerFiles((prev) => {
-          if (!append) return result.files;
-          const seen = new Set(prev.map((file) => file.id));
-          return [...prev, ...result.files.filter((file) => !seen.has(file.id))];
-        });
-        setFilesTotal(result.total);
-        setFilesTotalPages(result.totalPages);
-        setBillableTotal(result.billableTotal);
-        for (const file of result.files) {
-          if (selectedFileIdsRef.current.has(file.id)) {
-            selectedFileCacheRef.current.set(file.id, file);
+        const merged: FileRecord[] = [];
+        const seen = new Set<string>();
+        let page = 1;
+        let totalPages = 1;
+        let billableTotal = 0;
+
+        while (page <= totalPages) {
+          const body = billingFiltersToApiPayload(filters, {
+            page,
+            pageSize: BILLING_FILES_PAGE_SIZE_MAX,
+          });
+          const result = await fetchDealerBillingFilePage(dealer.id, {
+            signal: controller.signal,
+            body,
+          });
+          if (controller.signal.aborted) return;
+
+          totalPages = result.totalPages;
+          billableTotal = result.billableTotal;
+
+          for (const file of result.files) {
+            if (seen.has(file.id)) continue;
+            seen.add(file.id);
+            merged.push(file);
+            if (selectedFileIdsRef.current.has(file.id)) {
+              selectedFileCacheRef.current.set(file.id, file);
+            }
           }
+          page += 1;
         }
+<<<<<<< HEAD
+=======
+
+        setDealerFiles(merged);
+        setBillableTotal(billableTotal);
+
+        if (billingAutoSelectPendingRef.current && billableTotal > 0) {
+          billingAutoSelectPendingRef.current = false;
+          await applyBillableSelection(dealer, filters, controller.signal);
+        }
+>>>>>>> 32693cab7b9956e6a71c81e09d2970768c4b9f06
       } catch (err) {
         if (controller.signal.aborted) return;
-        if (!append) {
-          setDealerFiles([]);
-          setFilesTotal(0);
-          setFilesTotalPages(1);
-          setBillableTotal(0);
-        }
+        setDealerFiles([]);
+        setBillableTotal(0);
         showToast(getApiError(err, 'Could not load files for this dealer.'), 'error');
       } finally {
         if (!controller.signal.aborted) {
           setFilesLoading(false);
-          setFilesLoadingMore(false);
-          filesLoadMoreLock.current = false;
         }
       }
     },
@@ -256,44 +255,16 @@ export default function DealerBillingStudioPage() {
   useEffect(() => () => filesRequestRef.current?.abort(), []);
 
   useEffect(() => {
-    setFilesPage(1);
-  }, [fileFilters, billingFilesRefreshKey, filesPageSize, isMobileList]);
-
-  useEffect(() => {
     if (step !== 2 || !selectedDealer) return;
-    const append = isMobileList && filesPage > 1;
-    void loadDealerFiles(selectedDealer, fileFilters, filesPage, filesPageSize, append);
-  }, [
-    step,
-    selectedDealer,
-    fileFilters,
-    filesPage,
-    filesPageSize,
-    isMobileList,
-    loadDealerFiles,
-    billingFilesRefreshKey,
-  ]);
-
-  const handleLoadMoreBillingFiles = useCallback(() => {
-    if (
-      !isMobileList ||
-      filesLoading ||
-      filesLoadingMore ||
-      filesLoadMoreLock.current ||
-      filesPage >= filesTotalPages
-    ) {
-      return;
-    }
-    filesLoadMoreLock.current = true;
-    setFilesPage((current) => (current < filesTotalPages ? current + 1 : current));
-  }, [isMobileList, filesLoading, filesLoadingMore, filesPage, filesTotalPages]);
+    void loadDealerFiles(selectedDealer, fileFilters);
+  }, [step, selectedDealer, fileFilters, loadDealerFiles, billingFilesRefreshKey]);
 
   /** After File Records expense/payment edits, reload billable files when user returns to this tab. */
   useEffect(() => {
     if (studioMode !== 'new' || step !== 2 || !selectedDealer) return undefined;
     const refreshIfVisible = () => {
       if (document.visibilityState === 'visible') {
-        void loadDealerFiles(selectedDealer, fileFilters, filesPage, filesPageSize, false);
+        void loadDealerFiles(selectedDealer, fileFilters);
       }
     };
     document.addEventListener('visibilitychange', refreshIfVisible);
@@ -302,14 +273,13 @@ export default function DealerBillingStudioPage() {
       document.removeEventListener('visibilitychange', refreshIfVisible);
       window.removeEventListener('focus', refreshIfVisible);
     };
-  }, [studioMode, step, selectedDealer, fileFilters, filesPage, filesPageSize, loadDealerFiles]);
+  }, [studioMode, step, selectedDealer, fileFilters, loadDealerFiles]);
 
   const handleDealerSelect = async (dealer: DealerRegistryRecord) => {
     if (dealerStepLoading) return;
     selectedFileCacheRef.current.clear();
     setSelectedFileIds(new Set());
     setInvoiceLineFiles([]);
-    setFilesPage(1);
     setSelectedDealer(dealer);
     setFileFilters(EMPTY_BILLING_FILE_FILTERS);
     setSearchInput('');
@@ -332,7 +302,6 @@ export default function DealerBillingStudioPage() {
   const handleApplyFilters = (draft: FileFilterDraft) => {
     clearBillingFileSelection();
     const next = draftFromFileFilter(draft, debouncedSearch);
-    setFilesPage(1);
     setFileFilters(next);
   };
 
@@ -392,6 +361,27 @@ export default function DealerBillingStudioPage() {
     }
   };
 
+  const selectedIdsKey = useMemo(
+    () => [...selectedFileIds].sort().join('\0'),
+    [selectedFileIds]
+  );
+
+  /** Step 2: changing checkboxes must invalidate any locked step-3 line list. */
+  useEffect(() => {
+    if (step !== 2) return;
+    setInvoiceLineFiles([]);
+    setActiveInvoiceId(null);
+    activeInvoiceIdRef.current = null;
+    persistNewInvoiceRef.current = null;
+    setInvoicePdfDownloaded(false);
+    setInvoiceGeneratedAt(undefined);
+  }, [selectedIdsKey, step]);
+
+  const clearAllFileSelection = () => {
+    setSelectedFileIds(new Set());
+    selectedFileCacheRef.current.clear();
+  };
+
   const toggleFile = (fileId: string) => {
     const file = dealerFiles.find((f) => f.id === fileId);
     if (file && !isBillableForInvoice(file)) return;
@@ -445,11 +435,13 @@ export default function DealerBillingStudioPage() {
   };
 
   const selectedFiles = useMemo(() => {
-    if (invoiceLineFiles.length) return invoiceLineFiles;
+    if (step === 3 && invoiceLineFiles.length) {
+      return invoiceLineFiles;
+    }
     return Array.from(selectedFileIds)
       .map((id) => selectedFileCacheRef.current.get(id))
       .filter((f): f is FileRecord => Boolean(f));
-  }, [invoiceLineFiles, selectedFileIds]);
+  }, [step, invoiceLineFiles, selectedFileIds]);
 
   const goToPreviewStep = () => {
     if (!selectedDealer || selectedFileIds.size === 0) return;
@@ -462,18 +454,23 @@ export default function DealerBillingStudioPage() {
       setFilesLoading(true);
       try {
         const ids = Array.from(selectedFileIds);
-        const resolved = await resolveDealerBillingFilesForInvoice(selectedDealer.id, ids);
-        if (resolved.length !== ids.length) {
+        const resolved = await resolveDealerBillingFilesForInvoice(
+          selectedDealer.id,
+          ids,
+          { body: billingFiltersToApiPayload(fileFilters) }
+        );
+        const resolvedBillable = resolved.filter(isBillableForInvoice);
+        if (resolvedBillable.length !== ids.length) {
           showToast(
             'Some selected files are no longer billable. Refresh the list and try again.',
             'error'
           );
           return;
         }
-        for (const file of resolved) {
+        for (const file of resolvedBillable) {
           selectedFileCacheRef.current.set(file.id, file);
         }
-        setInvoiceLineFiles(resolved);
+        setInvoiceLineFiles(resolvedBillable);
         const nextNo = await fetchNextBillingInvoiceNumber();
         setBillNumber(nextNo);
         setStep(3);
@@ -567,8 +564,17 @@ export default function DealerBillingStudioPage() {
   /** Persist invoice only — no PDF. Disables Save once done; enables Download. */
   const handleSaveInvoice = async () => {
     const draft = resolveBillingDraft();
+<<<<<<< HEAD
     if (!draft || !selectedDealer || activeInvoiceIdRef.current) return;
     setSavingInvoice(true);
+=======
+    if (!draft || !selectedDealer) return;
+    if (!draft.lines.length) {
+      showToast('Select at least one file before generating the invoice.', 'error');
+      return;
+    }
+    setGenerating(true);
+>>>>>>> 32693cab7b9956e6a71c81e09d2970768c4b9f06
     try {
       await ensureNewInvoicePersisted(draft);
       showToast(
@@ -602,6 +608,10 @@ export default function DealerBillingStudioPage() {
   const handleShareWhatsApp = async () => {
     const draft = resolveBillingDraft();
     if (!draft || !selectedDealer) return;
+    if (!draft.lines.length) {
+      showToast('Select at least one file before generating the invoice.', 'error');
+      return;
+    }
     const hadSavedInvoice = Boolean(activeInvoiceIdRef.current);
     setSharingWhatsApp(true);
     try {
@@ -708,15 +718,6 @@ export default function DealerBillingStudioPage() {
             selectedIds={selectedFileIds}
             selectedCount={selectedFileIds.size}
             billableTotal={billableTotal}
-            filesTotal={filesTotal}
-            filesPage={filesPage}
-            filesTotalPages={filesTotalPages}
-            filesPageSize={filesPageSize}
-            filesLoadingMore={filesLoadingMore}
-            onFilesPageChange={setFilesPage}
-            onFilesPageSizeChange={setFilesPageSize}
-            hasMoreFiles={isMobileList && filesPage < filesTotalPages}
-            onLoadMoreFiles={handleLoadMoreBillingFiles}
             filters={fileFilters}
             filtersOpen={filtersOpen}
             isAdmin={Boolean(isAdmin)}
@@ -735,7 +736,11 @@ export default function DealerBillingStudioPage() {
             onToggle={toggleFile}
             onToggleAll={toggleAllFiles}
             onSelectAllBillable={handleSelectAllBillable}
+<<<<<<< HEAD
             onAddExpenses={handleAddExpenses}
+=======
+            onClearSelection={clearAllFileSelection}
+>>>>>>> 32693cab7b9956e6a71c81e09d2970768c4b9f06
           />
         ) : null}
 
@@ -746,9 +751,61 @@ export default function DealerBillingStudioPage() {
         ) : null}
       </div>
 
+<<<<<<< HEAD
       {studioMode === 'new' ? (
         <div className="crm-billing-footer">
           {step > 1 ? (
+=======
+      <div className="crm-billing-footer">
+        {studioMode === 'new' && step > 1 ? (
+          <button
+            type="button"
+            className="crm-btn crm-btn--secondary"
+            onClick={() => {
+              if (step === 2) {
+                filesRequestRef.current?.abort();
+                billingAutoSelectPendingRef.current = false;
+                setDealerFiles([]);
+                setBillableTotal(0);
+                setSelectedFileIds(new Set());
+                selectedFileCacheRef.current.clear();
+                setInvoiceLineFiles([]);
+                setFilesLoading(false);
+                setFiltersOpen(false);
+              }
+              if (step === 3) {
+                setInvoiceLineFiles([]);
+              }
+              setStep((s) => (s === 3 ? 2 : 1) as BillingWizardStep);
+            }}
+          >
+            <ArrowLeft size={16} />
+            Back
+          </button>
+        ) : (
+          <span />
+        )}
+
+        {studioMode === 'new' && step === 2 ? (
+          <button
+            type="button"
+            className="crm-btn crm-btn--primary"
+            disabled={!canNextStep2}
+            onClick={goToPreviewStep}
+            title={
+              canNextStep2
+                ? `${selectedFileIds.size} file(s) will be on this invoice`
+                : 'Select at least one billable file'
+            }
+          >
+            Continue ({selectedFileIds.size} file{selectedFileIds.size === 1 ? '' : 's'})
+            <ArrowRight size={16} />
+          </button>
+        ) : null}
+
+        {studioMode === 'new' && step === 3 ? (
+          <div className="crm-billing-footer-actions">
+>>>>>>> 32693cab7b9956e6a71c81e09d2970768c4b9f06
             <button
               type="button"
               className="crm-btn crm-btn--secondary"

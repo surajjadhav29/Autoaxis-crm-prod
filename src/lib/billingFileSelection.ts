@@ -12,3 +12,12 @@ export function fileBillAmount(file: FileRecord): number {
 export function isBillableForInvoice(file: FileRecord): boolean {
   return fileBillAmount(file) > 0;
 }
+
+export function areAllBillableFilesSelected(
+  files: FileRecord[],
+  selectedIds: Iterable<string>
+): boolean {
+  const selected = selectedIds instanceof Set ? selectedIds : new Set(selectedIds);
+  const billable = files.filter(isBillableForInvoice);
+  return billable.length > 0 && billable.every((f) => selected.has(f.id));
+}

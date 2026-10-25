@@ -31,6 +31,7 @@ import {
   BILLING_EDIT_BILL_TOOLTIP,
   BILLING_ZERO_BILL_TOOLTIP,
   isBillableForInvoice,
+  areAllBillableFilesSelected,
 } from '@/lib/billingFileSelection';
 
 interface TableEmptyProps {
@@ -103,9 +104,9 @@ export default function FileTable({
   const isBilling = mode === 'billing';
   const showAdminCols = isAdmin && !isBilling;
   const selectedSet = new Set(selectedIds);
-  const billableFiles = isBilling ? files.filter(isBillableForInvoice) : files;
-  const allSelected =
-    billableFiles.length > 0 && billableFiles.every((f) => selectedSet.has(f.id));
+  const allSelected = isBilling
+    ? areAllBillableFilesSelected(files, selectedSet)
+    : files.length > 0 && files.every((f) => selectedSet.has(f.id));
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {

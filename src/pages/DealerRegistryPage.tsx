@@ -53,13 +53,13 @@ function validateForm(
   const state = form.state.trim();
   const zip = form.zip.trim();
 
-  if (!name || !email || !phone || !address || !city || !state || !zip) {
-    return 'Name, email, phone, address, city, state and ZIP are required.';
+  if (!name || !phone || !address || !city || !state || !zip) {
+    return 'Name, phone, address, city, state and ZIP are required.';
   }
   if (phone.length !== 10) {
     return 'Phone must be a 10-digit mobile number.';
   }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return 'Enter a valid email address.';
   }
   if (zip.length < 4) {
@@ -75,18 +75,27 @@ function validateForm(
   return null;
 }
 
+function dealerSearchHaystack(d: DealerRegistryRecord): string {
+  return [
+    d.name,
+    d.email,
+    d.phone,
+    d.city,
+    d.state,
+    d.address,
+    d.zip,
+    d.country,
+  ]
+    .map((part) => String(part ?? '').trim())
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+}
+
 function filterDealers(list: DealerRegistryRecord[], query: string) {
   const q = query.trim().toLowerCase();
   if (!q) return list;
-  return list.filter(
-    (d) =>
-      d.name.toLowerCase().includes(q) ||
-      d.email.toLowerCase().includes(q) ||
-      d.phone.includes(q) ||
-      d.city.toLowerCase().includes(q) ||
-      d.state.toLowerCase().includes(q) ||
-      (d.address && d.address.toLowerCase().includes(q))
-  );
+  return list.filter((d) => dealerSearchHaystack(d).includes(q));
 }
 
 export default function DealerRegistryPage() {

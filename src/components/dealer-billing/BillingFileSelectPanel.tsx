@@ -7,13 +7,16 @@ import type { User } from '@/types/user.types';
 import type { FileFilterDraft } from '@/types/file.types';
 import FilesFilterDrawer from '../files/FilesFilterDrawer';
 import FileTable from '../FileTable';
-import Pagination from '../Pagination';
 import {
   billingDrawerFilterCount,
   billingFiltersToFileFilterDraft,
   buildBillingDrawerAppliedChips,
 } from '@/lib/billingFileFilters';
+<<<<<<< HEAD
 import { isBillableForInvoice } from '@/lib/billingFileSelection';
+=======
+import { areAllBillableFilesSelected } from '@/lib/billingFileSelection';
+>>>>>>> 32693cab7b9956e6a71c81e09d2970768c4b9f06
 
 interface BillingFileSelectPanelProps {
   dealer: DealerRegistryRecord;
@@ -22,15 +25,6 @@ interface BillingFileSelectPanelProps {
   selectedIds: Set<string>;
   selectedCount: number;
   billableTotal: number;
-  filesTotal: number;
-  filesPage: number;
-  filesTotalPages: number;
-  filesPageSize: number;
-  filesLoadingMore?: boolean;
-  onFilesPageChange: (page: number) => void;
-  onFilesPageSizeChange: (size: number) => void;
-  hasMoreFiles?: boolean;
-  onLoadMoreFiles?: () => void;
   filters: BillingPickFileFilters;
   filtersOpen: boolean;
   isAdmin: boolean;
@@ -46,8 +40,12 @@ interface BillingFileSelectPanelProps {
   onToggle: (fileId: string) => void;
   onToggleAll: (checked: boolean) => void;
   onSelectAllBillable: () => void;
+<<<<<<< HEAD
   /** Opens Add Expenses (same modal as File Records +). */
   onAddExpenses?: (file: FileRecord) => void;
+=======
+  onClearSelection: () => void;
+>>>>>>> 32693cab7b9956e6a71c81e09d2970768c4b9f06
 }
 
 export default function BillingFileSelectPanel({
@@ -57,15 +55,6 @@ export default function BillingFileSelectPanel({
   selectedIds,
   selectedCount,
   billableTotal,
-  filesTotal,
-  filesPage,
-  filesTotalPages,
-  filesPageSize,
-  filesLoadingMore = false,
-  onFilesPageChange,
-  onFilesPageSizeChange,
-  hasMoreFiles = false,
-  onLoadMoreFiles,
   filters,
   filtersOpen,
   isAdmin,
@@ -81,7 +70,11 @@ export default function BillingFileSelectPanel({
   onToggle,
   onToggleAll,
   onSelectAllBillable,
+<<<<<<< HEAD
   onAddExpenses,
+=======
+  onClearSelection,
+>>>>>>> 32693cab7b9956e6a71c81e09d2970768c4b9f06
 }: BillingFileSelectPanelProps) {
   const drawerFilterCount = billingDrawerFilterCount(filters, isAdmin);
   const selectedList = Array.from(selectedIds);
@@ -113,10 +106,15 @@ export default function BillingFileSelectPanel({
 
   /** Match FileTable: only billable rows (totalBill > 0) count — ₹0 rows stay unchecked. */
   const toggleSelectAll = () => {
+<<<<<<< HEAD
     const billableOnPage = files.filter(isBillableForInvoice);
     const allSelected =
       billableOnPage.length > 0 && billableOnPage.every((f) => selectedIds.has(f.id));
     onToggleAll(!allSelected);
+=======
+    const allBillableSelected = areAllBillableFilesSelected(files, selectedIds);
+    onToggleAll(!allBillableSelected);
+>>>>>>> 32693cab7b9956e6a71c81e09d2970768c4b9f06
   };
 
   return (
@@ -171,9 +169,15 @@ export default function BillingFileSelectPanel({
                 className="crm-btn crm-btn--secondary crm-btn--compact crm-billing-select-all-btn"
                 disabled={loading}
                 onClick={onSelectAllBillable}
+<<<<<<< HEAD
                 title={`Select all billable files (${billableTotal}). Showing ${selectedCount} selected.`}
               >
                 All ({selectedCount})
+=======
+                title={`Select all ${billableTotal} billable files matching current filters`}
+              >
+                Select all ({billableTotal})
+>>>>>>> 32693cab7b9956e6a71c81e09d2970768c4b9f06
               </button>
             ) : null}
             <button
@@ -190,6 +194,7 @@ export default function BillingFileSelectPanel({
           </div>
         </div>
 
+<<<<<<< HEAD
         {appliedDrawerChips.length ? (
           <div className="crm-filter-chips print:hidden">
             <div className="crm-filter-chips-list">
@@ -212,6 +217,27 @@ export default function BillingFileSelectPanel({
             </button>
           </div>
         ) : null}
+=======
+        <div className="crm-billing-dealer-subrow print:hidden">
+          <p className="crm-billing-dealer-subrow-text">
+            <strong className="crm-billing-selection-count">{selectedCount}</strong>
+            {' of '}
+            <strong>{billableTotal}</strong>
+            {' billable '}
+            {billableTotal === 1 ? 'file' : 'files'}
+            {' selected for invoice'}
+          </p>
+          {selectedCount > 0 ? (
+            <button
+              type="button"
+              className="crm-billing-dealer-subrow-clear"
+              onClick={onClearSelection}
+            >
+              Clear selection
+            </button>
+          ) : null}
+        </div>
+>>>>>>> 32693cab7b9956e6a71c81e09d2970768c4b9f06
 
         <div className="figma-table-card crm-billing-files-table-card">
           <FileTable
@@ -227,25 +253,7 @@ export default function BillingFileSelectPanel({
             emptyTitle="No unpaid files"
             emptyDescription="Try different filters or pick another dealer. Paid and paper-return files are excluded from billing."
             emptyIllustration="search"
-            hasMore={hasMoreFiles}
-            loadingMore={filesLoadingMore}
-            onLoadMore={onLoadMoreFiles}
           />
-          {!loading && filesTotal > 0 ? (
-            <div className="crm-billing-files-pagination hidden lg:block print:hidden">
-              <Pagination
-                currentPage={filesPage}
-                totalPages={filesTotalPages}
-                onPageChange={onFilesPageChange}
-                pageSize={filesPageSize}
-                pageSizeOptions={[8, 10, 20, 50]}
-                onPageSizeChange={(size) => {
-                  onFilesPageChange(1);
-                  onFilesPageSizeChange(size);
-                }}
-              />
-            </div>
-          ) : null}
         </div>
       </div>
 
