@@ -101,7 +101,6 @@ export default function DealerBillingStudioPage() {
   const [sharingWhatsApp, setSharingWhatsApp] = useState(false);
   const [dealerStepLoading, setDealerStepLoading] = useState(false);
   const filesRequestRef = useRef<AbortController | null>(null);
-  const billingAutoSelectPendingRef = useRef(false);
   const activeInvoiceIdRef = useRef<string | null>(null);
   const persistNewInvoiceRef = useRef<Promise<BillingDraft> | null>(null);
   const [invoicePdfDownloaded, setInvoicePdfDownloaded] = useState(false);
@@ -226,10 +225,23 @@ export default function DealerBillingStudioPage() {
         setDealerFiles(merged);
         setBillableTotal(billableTotal);
 
-        if (billingAutoSelectPendingRef.current && billableTotal > 0) {
-          billingAutoSelectPendingRef.current = false;
-          await applyBillableSelection(dealer, filters, controller.signal);
-        }
+        // After expense edits / refresh: drop ticks on files that are no longer billable.
+        const billableIds = new Set(
+          merged.filter((f) => isBillableForInvoice(f)).map((f) => f.id)
+        );
+        setSelectedFileIds((prev) => {
+          let changed = false;
+          const next = new Set<string>();
+          for (const id of prev) {
+            if (billableIds.has(id)) {
+              next.add(id);
+            } else {
+              changed = true;
+              selectedFileCacheRef.current.delete(id);
+            }
+          }
+          return changed ? next : prev;
+        });
       } catch (err) {
         if (controller.signal.aborted) return;
         setDealerFiles([]);
@@ -241,7 +253,7 @@ export default function DealerBillingStudioPage() {
         }
       }
     },
-    [showToast, applyBillableSelection]
+    [showToast]
   );
 
   useEffect(() => () => filesRequestRef.current?.abort(), []);
@@ -276,7 +288,6 @@ export default function DealerBillingStudioPage() {
     setFileFilters(EMPTY_BILLING_FILE_FILTERS);
     setSearchInput('');
     setDebouncedSearch('');
-    billingAutoSelectPendingRef.current = true;
     setDealerStepLoading(true);
     try {
       setStep(2);
@@ -337,7 +348,17 @@ export default function DealerBillingStudioPage() {
           : null;
       if (saved?.id) {
         setDealerFiles((prev) => prev.map((f) => (f.id === saved.id ? { ...f, ...saved } : f)));
-        if (selectedFileCacheRef.current.has(saved.id)) {
+        // ₹0 or paid → cannot stay on the invoice; drop the checkbox immediately.
+        const keepOnInvoice = isBillableForInvoice(saved) && !saved.paymentDone;
+        if (!keepOnInvoice) {
+          setSelectedFileIds((prev) => {
+            if (!prev.has(saved.id)) return prev;
+            const next = new Set(prev);
+            next.delete(saved.id);
+            return next;
+          });
+          selectedFileCacheRef.current.delete(saved.id);
+        } else if (selectedFileCacheRef.current.has(saved.id)) {
           selectedFileCacheRef.current.set(saved.id, {
             ...selectedFileCacheRef.current.get(saved.id)!,
             ...saved,
@@ -454,8 +475,13 @@ export default function DealerBillingStudioPage() {
         );
         const resolvedBillable = resolved.filter(isBillableForInvoice);
         if (resolvedBillable.length !== ids.length) {
+          const stillOk = new Set(resolvedBillable.map((f) => f.id));
+          setSelectedFileIds(stillOk);
+          for (const id of ids) {
+            if (!stillOk.has(id)) selectedFileCacheRef.current.delete(id);
+          }
           showToast(
-            'Some selected files are no longer billable. Refresh the list and try again.',
+            'Some selected files are no longer billable (₹0 or paid). Selection updated — pick billable files and try again.',
             'error'
           );
           return;
@@ -745,7 +771,6 @@ export default function DealerBillingStudioPage() {
               onClick={() => {
                 if (step === 2) {
                   filesRequestRef.current?.abort();
-                  billingAutoSelectPendingRef.current = false;
                   setDealerFiles([]);
                   setBillableTotal(0);
                   setSelectedFileIds(new Set());

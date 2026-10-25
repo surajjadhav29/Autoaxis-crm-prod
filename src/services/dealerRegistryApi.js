@@ -40,7 +40,7 @@ export async function fetchDealerRegistry() {
 }
 
 /**
- * GET /dealers/billing-pick — dealers with at least one billable unpaid file
+ * GET /dealers/billing-pick — dealers with unpaid billing-eligible files (incl. ₹0)
  * (Billing → New invoice → Step 1).
  */
 export async function fetchBillingPickDealers() {
