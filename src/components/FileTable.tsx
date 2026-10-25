@@ -28,6 +28,7 @@ import { getAllowedStatusValues } from '@/lib/whatsapp';
 import { FILE_STATUSES } from '@/lib/constants';
 import { isObjectionOverdue } from '@/lib/objectionReminder';
 import {
+  BILLING_EDIT_BILL_TOOLTIP,
   BILLING_ZERO_BILL_TOOLTIP,
   isBillableForInvoice,
 } from '@/lib/billingFileSelection';
@@ -281,7 +282,23 @@ export default function FileTable({
                   ) : null}
                   {(isAdmin || isBilling) && (
                     <FigmaCell variant="bill">
-                      <span className="figma-bill-text">₹ {(f.totalBill || 0).toLocaleString('en-IN')}</span>
+                      {isBilling && onAddExpenses ? (
+                        <button
+                          type="button"
+                          className="figma-bill-text figma-bill-text--btn"
+                          title={zeroBill ? BILLING_ZERO_BILL_TOOLTIP : BILLING_EDIT_BILL_TOOLTIP}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onAddExpenses(f);
+                          }}
+                        >
+                          ₹ {(f.totalBill || 0).toLocaleString('en-IN')}
+                        </button>
+                      ) : (
+                        <span className="figma-bill-text">
+                          ₹ {(f.totalBill || 0).toLocaleString('en-IN')}
+                        </span>
+                      )}
                     </FigmaCell>
                   )}
                   <FigmaCell variant="filestatus">
@@ -388,7 +405,7 @@ export default function FileTable({
                 onStatusChange={isBilling ? () => {} : onStatusChange}
                 onView={isBilling ? undefined : onView}
                 onEdit={isBilling ? undefined : onEdit}
-                onAddExpenses={isBilling ? undefined : onAddExpenses}
+                onAddExpenses={onAddExpenses}
                 onWhatsApp={isBilling ? undefined : onWhatsApp}
                 onDelete={isBilling ? undefined : onDelete}
                 users={users}

@@ -221,7 +221,7 @@ export default function BillingInvoiceTrackingPanel({
 
   return (
     <>
-      <div className="crm-page--files crm-billing-dealer-layout crm-billing-tracking-layout">
+      <div className="crm-page crm-page--files crm-billing-dealer-layout crm-billing-tracking-layout">
         <div className="crm-files-main">
           <div className="crm-page-head-row print:hidden">
             <div className="crm-page-head flex min-w-0 flex-1 items-center lg:min-w-0 lg:flex-none">

@@ -2459,6 +2459,10 @@ body {
     box-shadow: -10px 0 40px rgba(17, 24, 39, 0.14);
 }
 
+.crm-files-split--open {
+    position: relative;
+}
+
 /* File Records only — same invoice-step filter width/ shadow as billing (billing rules above unchanged). */
 .crm-page--files .crm-files-split--open .crm-filter-drawer-wrap--records-invoice {
     position: absolute;
@@ -2467,9 +2471,36 @@ body {
     bottom: 0;
     width: min(380px, 94vw);
     min-height: 0;
+    max-height: 100%;
     flex: none;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     z-index: 6;
     box-shadow: -10px 0 40px rgba(17, 24, 39, 0.14);
+}
+
+.crm-page--files .crm-files-split--open .crm-filter-drawer-wrap--records-invoice .crm-filter-drawer {
+    flex: 1;
+    min-height: 0;
+    max-height: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+.crm-page--files .crm-files-split--open .crm-filter-drawer-wrap--records-invoice .crm-filter-drawer-head,
+.crm-page--files .crm-files-split--open .crm-filter-drawer-wrap--records-invoice .crm-filter-drawer-foot {
+    flex-shrink: 0;
+}
+
+.crm-page--files .crm-files-split--open .crm-filter-drawer-wrap--records-invoice .crm-filter-drawer-body {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
 }
 
 .crm-filter-drawer--billing {
@@ -2719,11 +2750,16 @@ body {
         width: 100%;
         max-width: none;
         max-height: min(92vh, 780px);
+        height: min(92vh, 780px);
         z-index: 90;
         border-radius: 16px 16px 0 0;
         overflow: hidden;
         box-shadow: 0 -16px 48px rgba(17, 24, 39, 0.2);
         animation: crm-billing-filter-sheet-in 0.24s ease-out;
+    }
+
+    .crm-page--files .crm-files-split--open .crm-filter-drawer-wrap--records-invoice .crm-filter-drawer {
+        max-height: min(92vh, 780px);
     }
 
     .crm-files-split--open .crm-billing-filter-backdrop {
@@ -2938,6 +2974,45 @@ body {
 .crm-filter-date-block {
     display: flex;
     flex-direction: column;
+}
+
+.crm-filter-date-basis {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 8px 24px 4px;
+}
+
+.crm-filter-date-basis-btn {
+    min-height: 34px;
+    padding: 6px 10px;
+    border: 1px solid #e6e8eb;
+    border-radius: 6px;
+    background: #ffffff;
+    color: #667488;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.3;
+    cursor: pointer;
+}
+
+.crm-filter-date-basis-btn:hover {
+    background: #f5f8fc;
+    color: #2c3340;
+}
+
+.crm-filter-date-basis-btn--active {
+    border-color: #9ec0ef;
+    background: #e8f1fd;
+    color: #1a2332;
+}
+
+.crm-filter-date-basis-hint {
+    margin: 0;
+    padding: 2px 24px 8px;
+    font-size: 11px;
+    line-height: 1.4;
+    color: #667488;
 }
 
 .crm-filter-date-range {
@@ -4187,6 +4262,40 @@ body {
     line-height: 16px;
     color: #1d7f50;
     white-space: nowrap;
+}
+
+.figma-bill-text--btn {
+    appearance: none;
+    border: none;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+}
+
+.figma-bill-text--btn:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.crm-record-card-bill--btn {
+    appearance: none;
+    border: none;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+}
+
+.crm-record-card-bill--btn:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
 }
 
 .figma-file-status {
@@ -7974,10 +8083,20 @@ body {
     }
 }
 
+.crm-page--billing .crm-billing-tracking-layout {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
 .crm-page--billing .crm-billing-tracking-layout .crm-files-main {
     display: flex;
     flex-direction: column;
+    flex: 1;
     min-height: 0;
+    overflow: hidden;
 }
 
 .crm-billing-tracking-layout .crm-billing-invoice-history-card-wrap {
@@ -7986,18 +8105,27 @@ body {
     display: flex;
     flex-direction: column;
     margin: 0 16px;
+    overflow: hidden;
 }
 
 .crm-billing-tracking-layout .crm-billing-invoice-history-card-wrap .crm-files-table-panel {
     flex: 1;
     min-height: 0;
+    overflow: hidden;
 }
 
 .crm-billing-tracking-layout .crm-billing-invoice-history-card-wrap .crm-table-scroll {
-    flex: 1;
+    flex: 1 1 0;
     min-height: 0;
+    overflow-x: hidden;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+}
+
+.crm-billing-tracking-layout .crm-billing-invoice-history-mobile {
+    padding-bottom: 16px;
 }
 
 @media (min-width: 1024px) {

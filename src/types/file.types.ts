@@ -75,10 +75,17 @@ export interface FileFilterDraft {
   workType: string;
   /** Billing drawer: multi work-type filter. */
   workTypes?: string[];
+  /** Billing drawer: multi file-status filter. */
+  statuses?: string[];
   dealerNames: string[];
   dateFrom: string;
   dateTo: string;
   datePreset: string;
+  /**
+   * File Records only. `created` (default) = file Created date;
+   * `status` = day the file entered its current status (status tabs).
+   */
+  dateBasis?: 'created' | 'status';
 }
 
 export interface FileStats {

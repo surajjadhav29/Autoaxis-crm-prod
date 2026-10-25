@@ -13,6 +13,11 @@ import WhatsAppActionButton from './WhatsAppActionButton';
 import FileDocumentsCell from './FileDocumentsCell';
 import { getAllowedStatusValues } from '@/lib/whatsapp';
 import { isObjectionOverdue } from '@/lib/objectionReminder';
+import {
+  BILLING_EDIT_BILL_TOOLTIP,
+  BILLING_ZERO_BILL_TOOLTIP,
+  isBillableForInvoice,
+} from '@/lib/billingFileSelection';
 
 function statusLabel(status: string) {
   return FILE_STATUSES.find((s) => s.value === status)?.label || status;
@@ -128,7 +133,26 @@ export default function FileRecordCard({
         {(isAdmin || isBilling) && (
           <div className="crm-record-card-field">
             <dt>Bill</dt>
-            <dd className="crm-record-card-bill">₹ {(file.totalBill || 0).toLocaleString('en-IN')}</dd>
+            <dd>
+              {isBilling && onAddExpenses ? (
+                <button
+                  type="button"
+                  className="crm-record-card-bill crm-record-card-bill--btn"
+                  title={
+                    isBillableForInvoice(file)
+                      ? BILLING_EDIT_BILL_TOOLTIP
+                      : BILLING_ZERO_BILL_TOOLTIP
+                  }
+                  onClick={() => onAddExpenses(file)}
+                >
+                  ₹ {(file.totalBill || 0).toLocaleString('en-IN')}
+                </button>
+              ) : (
+                <span className="crm-record-card-bill">
+                  ₹ {(file.totalBill || 0).toLocaleString('en-IN')}
+                </span>
+              )}
+            </dd>
           </div>
         )}
         {isBilling && isAdmin ? (

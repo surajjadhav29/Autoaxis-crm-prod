@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Search, X } from 'lucide-react';
-import { RTOS } from '@/lib/constants';
+import { FILE_STATUSES, RTOS } from '@/lib/constants';
 import { fetchRtos } from '@/services/rtoService';
 import { fetchWorkTypes } from '@/services/workTypeService';
 import { NoResultsInline } from '@/components/EmptyStateIllustration';
@@ -20,11 +20,23 @@ const EMPTY: FileFilterDraft = {
   rtoNames: [],
   workType: '',
   workTypes: [],
+  statuses: [],
   dealerNames: [],
   dateFrom: '',
   dateTo: '',
   datePreset: '',
+  dateBasis: 'created',
 };
+
+const DATE_BASIS_OPTIONS = [
+  { value: 'created' as const, label: 'Created date' },
+  { value: 'status' as const, label: 'Status date' },
+];
+
+const FILE_STATUS_OPTIONS = FILE_STATUSES.map((item) => ({
+  value: item.value,
+  label: item.label,
+}));
 
 const DATE_PRESETS = [
   { value: 'hour', label: 'Within 1 hour' },
@@ -43,12 +55,26 @@ function normalizeDraftForCompare(d: FileFilterDraft) {
     userIds: [...userIds].sort(),
     workType: d.workType || '',
     workTypes: [...workTypes].sort(),
+    statuses: [...(d.statuses || [])].sort(),
     dateFrom: d.dateFrom || '',
     dateTo: d.dateTo || '',
     datePreset: d.datePreset || '',
+    dateBasis: d.dateBasis === 'status' ? 'status' : 'created',
     rtoNames: [...(d.rtoNames || [])].sort(),
     dealerNames: [...(d.dealerNames || [])].sort(),
   };
+}
+
+/** Custom range is valid only when both Start and End are set. */
+function hasCompleteDateRange(draft: FileFilterDraft) {
+  return Boolean(draft.dateFrom && draft.dateTo);
+}
+
+/** One side filled, the other empty — Apply must stay disabled until fixed. */
+function hasIncompleteDateRange(draft: FileFilterDraft) {
+  const hasFrom = Boolean(draft.dateFrom);
+  const hasTo = Boolean(draft.dateTo);
+  return (hasFrom && !hasTo) || (!hasFrom && hasTo);
 }
 
 function hasAnyFilterInDraft(draft: FileFilterDraft) {
@@ -57,8 +83,11 @@ function hasAnyFilterInDraft(draft: FileFilterDraft) {
   if (draft.rtoNames?.length) return true;
   if (draft.workType) return true;
   if (draft.workTypes?.length) return true;
+  if (draft.statuses?.length) return true;
   if (draft.dealerNames?.length) return true;
-  if (draft.dateFrom || draft.dateTo || draft.datePreset) return true;
+  // Custom dates count only as a full Start+End pair (presets are separate).
+  if (hasCompleteDateRange(draft) || draft.datePreset) return true;
+  if (draft.dateBasis === 'status') return true;
   return false;
 }
 
@@ -81,22 +110,29 @@ function draftFromApplied(applied: FileFilterDraft | undefined): FileFilterDraft
       : a.workType
         ? [a.workType]
         : [],
+    statuses: Array.isArray(a.statuses) ? [...a.statuses] : [],
     dealerNames: Array.isArray(a.dealerNames) ? [...a.dealerNames] : [],
+    dateBasis: a.dateBasis === 'status' ? 'status' : 'created',
   };
 }
 
 function normalizeDraftForApply(draft: FileFilterDraft): FileFilterDraft {
   const normalized = normalizeDraftForCompare(draft);
+  // Never apply a one-sided custom range (Start-only / End-only).
+  const dateFrom = normalized.dateFrom && normalized.dateTo ? normalized.dateFrom : '';
+  const dateTo = normalized.dateFrom && normalized.dateTo ? normalized.dateTo : '';
   return {
     userId: normalized.userId,
     userIds: normalized.userIds,
     rtoNames: normalized.rtoNames,
     workType: normalized.workType,
     workTypes: normalized.workTypes,
+    statuses: normalized.statuses,
     dealerNames: normalized.dealerNames,
-    dateFrom: normalized.dateFrom,
-    dateTo: normalized.dateTo,
-    datePreset: normalized.datePreset,
+    dateFrom,
+    dateTo,
+    datePreset: dateFrom || dateTo ? '' : normalized.datePreset,
+    dateBasis: normalized.dateBasis === 'status' ? 'status' : 'created',
   };
 }
 
@@ -104,10 +140,11 @@ function rtoKey(name: string) {
   return name.trim().toUpperCase().split(/[\s-]+/)[0];
 }
 
+/** Built-in first, then custom DB RTOs (API returns oldest → newest). */
 function mergeRtos(custom: string[]) {
   const seen = new Set();
   const out = [];
-  for (const rto of [...custom, ...RTOS]) {
+  for (const rto of [...RTOS, ...custom]) {
     const key = rtoKey(rto);
     if (!key || seen.has(key)) continue;
     seen.add(key);
@@ -240,6 +277,11 @@ interface FilesFilterDrawerProps {
   filterUi?: 'classic' | 'invoice';
   appliedFilterChips?: BillingFilterChip[];
   onClearAppliedFilters?: () => void;
+  /**
+   * File Records status tabs: show Created vs Status date basis.
+   * All Files / Billing leave this false (Created only).
+   */
+  allowStatusDateBasis?: boolean;
 }
 
 export default function FilesFilterDrawer({
@@ -256,6 +298,7 @@ export default function FilesFilterDrawer({
   filterUi,
   appliedFilterChips = [],
   onClearAppliedFilters,
+  allowStatusDateBasis = false,
 }: FilesFilterDrawerProps) {
   const invoiceUi = filterUi === 'invoice' || variant === 'billing';
   const sectionForceOpen = invoiceUi;
@@ -264,6 +307,8 @@ export default function FilesFilterDrawer({
   const [workTypes, setWorkTypes] = useState<string[]>([]);
 
   const isApplyActive = useMemo(() => {
+    // Incomplete Start/End pair blocks Apply even if other filters changed.
+    if (hasIncompleteDateRange(draft)) return false;
     return (
       hasAnyFilterInDraft(draft) ||
       draftDiffersFromApplied(draft, applied || EMPTY)
@@ -336,11 +381,25 @@ export default function FilesFilterDrawer({
   };
 
   const setDateRange = (key: 'dateFrom' | 'dateTo', value: string) => {
-    setDraft((prev) => ({
-      ...prev,
-      datePreset: '',
-      [key]: value,
-    }));
+    setDraft((prev) => {
+      let dateFrom = prev.dateFrom;
+      let dateTo = prev.dateTo;
+      if (key === 'dateFrom') {
+        dateFrom = value;
+        // Start moved past End → clear End so user picks a valid End (≥ Start).
+        if (dateFrom && dateTo && dateTo < dateFrom) dateTo = '';
+      } else {
+        // Ignore End before Start (min= can be bypassed via keyboard on some browsers).
+        if (prev.dateFrom && value && value < prev.dateFrom) return prev;
+        dateTo = value;
+      }
+      return {
+        ...prev,
+        datePreset: '',
+        dateFrom,
+        dateTo,
+      };
+    });
   };
 
   if (!open) return null;
@@ -358,40 +417,19 @@ export default function FilesFilterDrawer({
       </header>
 
       <div className="crm-filter-drawer-body">
-          {invoiceUi ? (
-            <div className="crm-filter-drawer-applied">
-              <div className="crm-filter-drawer-applied-head">
-                <span className="crm-filter-drawer-applied-title">Selected filters</span>
-                {appliedFilterChips.length && onClearAppliedFilters ? (
-                  <button
-                    type="button"
-                    className="crm-filter-drawer-applied-clear"
-                    onClick={onClearAppliedFilters}
-                  >
-                    Clear all
-                  </button>
-                ) : null}
-              </div>
-              {appliedFilterChips.length ? (
-                <div className="crm-filter-drawer-applied-chips">
-                  {appliedFilterChips.map((chip) => (
-                    <span key={chip.key} className="crm-filter-chip crm-filter-chip--drawer">
-                      {chip.label}
-                      <button
-                        type="button"
-                        className="crm-filter-chip-remove"
-                        onClick={chip.onRemove}
-                        aria-label={`Remove ${chip.label}`}
-                      >
-                        <X size={12} />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <p className="crm-filter-drawer-applied-empty">No filters selected yet.</p>
-              )}
-            </div>
+          {/* Applied chips render above the table (File Records + Billing), not inside the drawer. */}
+
+          {/* Billing only: File status first so it is visible without scrolling. */}
+          {variant === 'billing' ? (
+            <FilterSection title="File status" forceOpen={sectionForceOpen} defaultOpen>
+              <FilterOptionList
+                options={FILE_STATUS_OPTIONS}
+                multiple
+                values={draft.statuses || []}
+                onChangeValues={(next) => setDraft((prev) => ({ ...prev, statuses: next }))}
+                searchPlaceholder="Search status"
+              />
+            </FilterSection>
           ) : null}
 
           {isAdmin ? (
@@ -444,6 +482,33 @@ export default function FilesFilterDrawer({
 
           <FilterSection title="File date" defaultOpen forceOpen={sectionForceOpen}>
             <div className="crm-filter-date-block">
+              {allowStatusDateBasis ? (
+                <div className="crm-filter-date-basis" role="group" aria-label="Date filter basis">
+                  {DATE_BASIS_OPTIONS.map((opt) => {
+                    const selected = (draft.dateBasis || 'created') === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        className={`crm-filter-date-basis-btn${selected ? ' crm-filter-date-basis-btn--active' : ''}`}
+                        onClick={() =>
+                          setDraft((prev) => ({
+                            ...prev,
+                            dateBasis: opt.value,
+                          }))
+                        }
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+              {allowStatusDateBasis && draft.dateBasis === 'status' ? (
+                <p className="crm-filter-date-basis-hint">
+                  Filter by the day this file moved into the current status
+                </p>
+              ) : null}
               <div className="crm-filter-date-presets">
                 {DATE_PRESETS.map((opt) => {
                   const selected = draft.datePreset === opt.value;
@@ -475,9 +540,15 @@ export default function FilesFilterDrawer({
                     type="date"
                     value={draft.dateTo}
                     min={draft.dateFrom || undefined}
+                    disabled={!draft.dateFrom}
                     onChange={(e) => setDateRange('dateTo', e.target.value)}
                   />
                 </label>
+                {hasIncompleteDateRange(draft) ? (
+                  <p className="crm-filter-date-basis-hint">
+                    Select both Start Date and End Date to apply a custom range
+                  </p>
+                ) : null}
               </div>
             </div>
           </FilterSection>
@@ -496,7 +567,9 @@ export default function FilesFilterDrawer({
           className={`crm-filter-apply${isApplyActive ? ' crm-filter-apply--active' : ''}`}
           disabled={!isApplyActive}
           onClick={() => {
-            onApply(normalizeDraftForApply(draft));
+            const next = normalizeDraftForApply(draft);
+            if (!allowStatusDateBasis) next.dateBasis = 'created';
+            onApply(next);
             onClose();
           }}
         >

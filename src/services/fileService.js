@@ -34,11 +34,11 @@ function asFilterList(value) {
 
 export async function fetchStats(
   user,
-  { filterUserId, rtoName, workType, dealerName, search, date, dateFrom, dateTo, datePreset } = {}
+  { filterUserId, rtoName, workType, dealerName, search, date, dateFrom, dateTo, datePreset, dateBasis } = {}
 ) {
   const params = withFilters(
     {},
-    { rtoName, workType, dealerName, date, dateFrom, dateTo, datePreset }
+    { rtoName, workType, dealerName, date, dateFrom, dateTo, datePreset, dateBasis }
   );
   if (user.role === 'superadmin' && filterUserId) params.userId = filterUserId;
   if (search) params.search = search;
@@ -114,7 +114,7 @@ export async function fetchObjectionFollowUps(
 // query strings to the API.
 function withFilters(
   params,
-  { rtoName, workType, dealerName, date, dateFrom, dateTo, datePreset } = {}
+  { rtoName, workType, dealerName, date, dateFrom, dateTo, datePreset, dateBasis } = {}
 ) {
   const rtos = asFilterList(rtoName);
   const workTypes = asFilterList(workType);
@@ -128,6 +128,8 @@ function withFilters(
     if (date) params.date = date;
     if (datePreset) params.datePreset = datePreset;
   }
+  // Only send when status — omit keeps BE default (created).
+  if (dateBasis === 'status') params.dateBasis = 'status';
   return params;
 }
 
@@ -146,14 +148,18 @@ function withFilters(
  *   dateFrom?: string,
  *   dateTo?: string,
  *   datePreset?: string,
+ *   dateBasis?: string,
  * }} [filters]
  */
 export async function fetchFilesForExport(
   user,
-  { type = 'all_records', search = '', filterUserId, rtoName, workType, dealerName, date, dateFrom, dateTo, datePreset } = {}
+  { type = 'all_records', search = '', filterUserId, rtoName, workType, dealerName, date, dateFrom, dateTo, datePreset, dateBasis } = {}
 ) {
   const isAdmin = user.role === 'superadmin';
-  const params = withFilters({ type }, { rtoName, workType, dealerName, date, dateFrom, dateTo, datePreset });
+  const params = withFilters(
+    { type },
+    { rtoName, workType, dealerName, date, dateFrom, dateTo, datePreset, dateBasis }
+  );
   if (search) params.search = search;
   if (isAdmin && filterUserId) params.userId = filterUserId;
   const { data } = await api.get('/files', { params });
@@ -179,6 +185,7 @@ export async function fetchFilesForExport(
  *   dateFrom?: string,
  *   dateTo?: string,
  *   datePreset?: string,
+ *   dateBasis?: string,
  * }} opts
  */
 export async function fetchFilesPaginated({
@@ -195,11 +202,12 @@ export async function fetchFilesPaginated({
   dateFrom,
   dateTo,
   datePreset,
+  dateBasis,
 }) {
   const isAdmin = user.role === 'superadmin';
   const params = withFilters(
     { status: type, search, page, pageSize },
-    { rtoName, workType, dealerName, date, dateFrom, dateTo, datePreset }
+    { rtoName, workType, dealerName, date, dateFrom, dateTo, datePreset, dateBasis }
   );
   if (isAdmin && filterUserId) params.userId = filterUserId;
   const { data } = await api.get('/files/paginated', { params });

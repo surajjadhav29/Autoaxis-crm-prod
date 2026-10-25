@@ -59,6 +59,8 @@ export interface BillingPickFileFilters {
   userIds: string[];
   rtoNames: string[];
   workTypes: string[];
+  /** File workflow status (pending, in_progress, …) — multi-select. */
+  statuses: string[];
   dateFrom: string;
   dateTo: string;
   datePreset: string;
@@ -69,6 +71,7 @@ export const EMPTY_BILLING_FILE_FILTERS: BillingPickFileFilters = {
   userIds: [],
   rtoNames: [],
   workTypes: [],
+  statuses: [],
   dateFrom: '',
   dateTo: '',
   datePreset: '',

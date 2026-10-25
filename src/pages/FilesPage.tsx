@@ -98,6 +98,8 @@ export default function FilesPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [datePreset, setDatePreset] = useState('');
+  /** `created` = file.date (default); `status` = entered current status (status tabs only). */
+  const [dateBasis, setDateBasis] = useState<'created' | 'status'>('created');
   const [dealerOptions, setDealerOptions] = useState<string[]>([]);
   const [filteredStats, setFilteredStats] = useState<FileStats | null>(null);
   const { toast, showToast, showError, clearToast } = useToast();
@@ -128,6 +130,16 @@ export default function FilesPage() {
     window.dispatchEvent(new CustomEvent('crm:filters', { detail: { open: filtersOpen } }));
     return () => {
       window.dispatchEvent(new CustomEvent('crm:filters', { detail: { open: false } }));
+    };
+  }, [filtersOpen]);
+
+  /** Keep page chrome fixed while the filter panel scrolls on its own. */
+  useEffect(() => {
+    if (!filtersOpen) return undefined;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
     };
   }, [filtersOpen]);
 
@@ -180,6 +192,7 @@ export default function FilesPage() {
             dateFrom: dateFrom || undefined,
             dateTo: dateTo || undefined,
             datePreset: dateFrom || dateTo ? undefined : datePreset || undefined,
+            dateBasis: view !== 'all_records' && dateBasis === 'status' ? 'status' : undefined,
             search: debouncedSearch || undefined,
           }).catch(() => null),
           refreshStats().catch(() => null),
@@ -200,6 +213,7 @@ export default function FilesPage() {
         dateFrom,
         dateTo,
         datePreset: dateFrom || dateTo ? undefined : datePreset || undefined,
+        dateBasis: view !== 'all_records' && dateBasis === 'status' ? 'status' : undefined,
         filterUserId: isAdmin ? filterUserId || null : null,
       });
       if (gen !== loadGen.current) return;
@@ -232,6 +246,7 @@ export default function FilesPage() {
     dateFrom,
     dateTo,
     datePreset,
+    dateBasis,
     filterUserId,
     refreshStats,
   ]);
@@ -279,12 +294,19 @@ export default function FilesPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [view, debouncedSearch, pageSize, rtoFilter, workTypesFilter, dealerFilter, dateFrom, dateTo, datePreset, userIdsFilter, isMobileList]);
+  }, [view, debouncedSearch, pageSize, rtoFilter, workTypesFilter, dealerFilter, dateFrom, dateTo, datePreset, dateBasis, userIdsFilter, isMobileList]);
 
   useEffect(() => {
     setSelectedIds([]);
     setBulkDeleteOpen(false);
-  }, [view, rtoFilter, workTypesFilter, dealerFilter, dateFrom, dateTo, datePreset, userIdsFilter, debouncedSearch]);
+  }, [view, rtoFilter, workTypesFilter, dealerFilter, dateFrom, dateTo, datePreset, dateBasis, userIdsFilter, debouncedSearch]);
+
+  /** All Files always uses Created date — drop Status basis when switching there. */
+  useEffect(() => {
+    if (view === 'all_records' && dateBasis === 'status') {
+      setDateBasis('created');
+    }
+  }, [view, dateBasis]);
 
   useEffect(() => {
     if (!isMobileList) {
@@ -324,10 +346,14 @@ export default function FilesPage() {
       draft.workTypes?.length ? draft.workTypes : draft.workType ? [draft.workType] : [];
     setWorkTypesFilter([...workTypes]);
     setDealerFilter(draft.dealerNames || []);
-    const hasRange = Boolean(draft.dateFrom || draft.dateTo);
-    setDateFrom(draft.dateFrom || '');
-    setDateTo(draft.dateTo || '');
+    // Custom range only when both ends are present (drawer enforces the same).
+    const hasRange = Boolean(draft.dateFrom && draft.dateTo);
+    setDateFrom(hasRange ? draft.dateFrom || '' : '');
+    setDateTo(hasRange ? draft.dateTo || '' : '');
     setDatePreset(hasRange ? '' : draft.datePreset || '');
+    setDateBasis(
+      view !== 'all_records' && draft.dateBasis === 'status' ? 'status' : 'created'
+    );
     if (isAdmin) {
       const userIds =
         draft.userIds?.length ? draft.userIds : draft.userId ? [draft.userId] : [];
@@ -343,6 +369,7 @@ export default function FilesPage() {
     setDateFrom('');
     setDateTo('');
     setDatePreset('');
+    setDateBasis('created');
     if (isAdmin) setFilterUserIds([]);
   };
 
@@ -363,27 +390,14 @@ export default function FilesPage() {
     dateFrom,
     dateTo,
     datePreset,
+    dateBasis,
   };
-  const DATE_CHIP_LABELS: Record<string, string> = {
-    hour: 'Within 1 hour',
-    today: 'Today',
-    yesterday: 'Yesterday',
-    '30d': 'Last 30 days',
-  };
-  const toChipDate = (iso: string) => iso.split('-').reverse().join('/');
-  const dateChipLabel = DATE_CHIP_LABELS[datePreset]
-    || (dateFrom && dateTo
-      ? `${toChipDate(dateFrom)} – ${toChipDate(dateTo)}`
-      : dateFrom
-        ? `From ${toChipDate(dateFrom)}`
-        : dateTo
-          ? `Until ${toChipDate(dateTo)}`
-          : '');
 
   const clearDateFilter = () => {
     setDateFrom('');
     setDateTo('');
     setDatePreset('');
+    setDateBasis('created');
   };
 
   const patchDrawerFilter = (patch: Partial<FileFilterDraft>) => {
@@ -394,11 +408,15 @@ export default function FilesPage() {
     if (
       patch.dateFrom !== undefined ||
       patch.dateTo !== undefined ||
-      patch.datePreset !== undefined
+      patch.datePreset !== undefined ||
+      patch.dateBasis !== undefined
     ) {
       setDateFrom(patch.dateFrom ?? '');
       setDateTo(patch.dateTo ?? '');
       setDatePreset(patch.datePreset ?? '');
+      if (patch.dateBasis !== undefined) {
+        setDateBasis(patch.dateBasis === 'status' ? 'status' : 'created');
+      }
     }
   };
 
@@ -650,6 +668,7 @@ export default function FilesPage() {
         dateFrom: dateFrom || undefined,
         dateTo: dateTo || undefined,
         datePreset: dateFrom || dateTo ? undefined : datePreset || undefined,
+        dateBasis: view !== 'all_records' && dateBasis === 'status' ? 'status' : undefined,
         filterUserId: isAdmin ? filterUserId || undefined : undefined,
       });
       const total = exportResult.total || 0;
@@ -901,6 +920,7 @@ export default function FilesPage() {
         filterUi="invoice"
         appliedFilterChips={drawerAppliedChips}
         onClearAppliedFilters={clearDrawerFilters}
+        allowStatusDateBasis={view !== 'all_records'}
       />
 
       </div>

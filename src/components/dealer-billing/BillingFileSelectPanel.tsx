@@ -13,6 +13,7 @@ import {
   billingFiltersToFileFilterDraft,
   buildBillingDrawerAppliedChips,
 } from '@/lib/billingFileFilters';
+import { isBillableForInvoice } from '@/lib/billingFileSelection';
 
 interface BillingFileSelectPanelProps {
   dealer: DealerRegistryRecord;
@@ -45,6 +46,8 @@ interface BillingFileSelectPanelProps {
   onToggle: (fileId: string) => void;
   onToggleAll: (checked: boolean) => void;
   onSelectAllBillable: () => void;
+  /** Opens Add Expenses (same modal as File Records +). */
+  onAddExpenses?: (file: FileRecord) => void;
 }
 
 export default function BillingFileSelectPanel({
@@ -78,6 +81,7 @@ export default function BillingFileSelectPanel({
   onToggle,
   onToggleAll,
   onSelectAllBillable,
+  onAddExpenses,
 }: BillingFileSelectPanelProps) {
   const drawerFilterCount = billingDrawerFilterCount(filters, isAdmin);
   const selectedList = Array.from(selectedIds);
@@ -88,6 +92,7 @@ export default function BillingFileSelectPanel({
       filters.userIds.join('\0'),
       filters.rtoNames.join('\0'),
       filters.workTypes.join('\0'),
+      filters.statuses.join('\0'),
       filters.dateFrom,
       filters.dateTo,
       filters.datePreset,
@@ -101,11 +106,16 @@ export default function BillingFileSelectPanel({
       onPatchFilters({ rtoNames: (filters.rtoNames || []).filter((item) => item !== name) }),
     onRemoveWorkType: (name) =>
       onPatchFilters({ workTypes: (filters.workTypes || []).filter((item) => item !== name) }),
+    onRemoveStatus: (status) =>
+      onPatchFilters({ statuses: (filters.statuses || []).filter((item) => item !== status) }),
     onClearDate: () => onPatchFilters({ dateFrom: '', dateTo: '', datePreset: '' }),
   });
 
+  /** Match FileTable: only billable rows (totalBill > 0) count — ₹0 rows stay unchecked. */
   const toggleSelectAll = () => {
-    const allSelected = files.length > 0 && files.every((f) => selectedIds.has(f.id));
+    const billableOnPage = files.filter(isBillableForInvoice);
+    const allSelected =
+      billableOnPage.length > 0 && billableOnPage.every((f) => selectedIds.has(f.id));
     onToggleAll(!allSelected);
   };
 
@@ -161,8 +171,9 @@ export default function BillingFileSelectPanel({
                 className="crm-btn crm-btn--secondary crm-btn--compact crm-billing-select-all-btn"
                 disabled={loading}
                 onClick={onSelectAllBillable}
+                title={`Select all billable files (${billableTotal}). Showing ${selectedCount} selected.`}
               >
-                All ({billableTotal})
+                All ({selectedCount})
               </button>
             ) : null}
             <button
@@ -179,6 +190,29 @@ export default function BillingFileSelectPanel({
           </div>
         </div>
 
+        {appliedDrawerChips.length ? (
+          <div className="crm-filter-chips print:hidden">
+            <div className="crm-filter-chips-list">
+              {appliedDrawerChips.map((chip) => (
+                <span key={chip.key} className="crm-filter-chip">
+                  {chip.label}
+                  <button
+                    type="button"
+                    className="crm-filter-chip-remove"
+                    onClick={chip.onRemove}
+                    aria-label={`Remove ${chip.label}`}
+                  >
+                    <X size={12} />
+                  </button>
+                </span>
+              ))}
+            </div>
+            <button type="button" className="crm-filter-clear-all" onClick={onClearFilters}>
+              Clear all
+            </button>
+          </div>
+        ) : null}
+
         <div className="figma-table-card crm-billing-files-table-card">
           <FileTable
             mode="billing"
@@ -189,6 +223,7 @@ export default function BillingFileSelectPanel({
             onToggleSelect={onToggle}
             onToggleSelectAll={toggleSelectAll}
             onStatusChange={() => {}}
+            onAddExpenses={onAddExpenses}
             emptyTitle="No unpaid files"
             emptyDescription="Try different filters or pick another dealer. Paid and paper-return files are excluded from billing."
             emptyIllustration="search"

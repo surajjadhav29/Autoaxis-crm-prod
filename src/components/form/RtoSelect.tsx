@@ -17,13 +17,13 @@ function rtoKey(name: string) {
   return name.trim().toUpperCase().split(/[\s-]+/)[0];
 }
 
-/** Custom (DB) RTOs first so newly added offices like Delhi are visible without scrolling. */
+/** Built-in RTOs first, then custom (DB) in API order — oldest first, newest last. */
 function mergeRtos(custom: string[]) {
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const rto of [...custom, ...RTOS]) {
+  for (const rto of [...RTOS, ...custom]) {
     const key = rtoKey(rto);
-    if (seen.has(key)) continue;
+    if (!key || seen.has(key)) continue;
     seen.add(key);
     out.push(rto);
   }
@@ -197,7 +197,7 @@ export function RtoSelectControl({
     setCreateError('');
     try {
       const rto = await createRto(trimmed);
-      setCustomRtos((prev) => Array.from(new Set([rto.name, ...prev])));
+      setCustomRtos((prev) => Array.from(new Set([...prev, rto.name])));
       onChange(rto.name);
       setAdding(false);
       setNewName('');

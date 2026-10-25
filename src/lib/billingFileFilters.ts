@@ -1,6 +1,11 @@
 import type { BillingPickFileFilters } from '@/types/dealerBilling.types';
 import type { FileFilterDraft } from '@/types/file.types';
 import type { User } from '@/types/user.types';
+import { FILE_STATUSES } from '@/lib/constants';
+
+function fileStatusChipLabel(status: string): string {
+  return FILE_STATUSES.find((item) => item.value === status)?.label || status;
+}
 
 export const BILLING_DATE_PRESET_LABELS: Record<string, string> = {
   hour: 'Within 1 hour',
@@ -13,15 +18,34 @@ function toChipDate(iso: string) {
   return iso.split('-').reverse().join('/');
 }
 
+/** Custom date range is valid only with both Start and End. */
+export function normalizeBillingDateRange(filters: {
+  dateFrom?: string;
+  dateTo?: string;
+  datePreset?: string;
+}): { dateFrom: string; dateTo: string; datePreset: string } {
+  const dateFrom = String(filters.dateFrom || '').trim();
+  const dateTo = String(filters.dateTo || '').trim();
+  if (dateFrom && dateTo) {
+    const from = dateFrom <= dateTo ? dateFrom : dateTo;
+    const to = dateFrom <= dateTo ? dateTo : dateFrom;
+    return { dateFrom: from, dateTo: to, datePreset: '' };
+  }
+  return {
+    dateFrom: '',
+    dateTo: '',
+    datePreset: String(filters.datePreset || '').trim(),
+  };
+}
+
 export function billingDateFilterLabel(filters: BillingPickFileFilters): string {
   if (filters.datePreset) {
     return BILLING_DATE_PRESET_LABELS[filters.datePreset] || filters.datePreset;
   }
+  // Only complete Start+End ranges (one-sided From/Until no longer applied).
   if (filters.dateFrom && filters.dateTo) {
     return `${toChipDate(filters.dateFrom)} – ${toChipDate(filters.dateTo)}`;
   }
-  if (filters.dateFrom) return `From ${toChipDate(filters.dateFrom)}`;
-  if (filters.dateTo) return `Until ${toChipDate(filters.dateTo)}`;
   return '';
 }
 
@@ -34,6 +58,7 @@ export type BillingFilesRequestPayload = {
   userIds?: string[];
   rtoNames?: string[];
   workTypes?: string[];
+  statuses?: string[];
   search?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -63,14 +88,15 @@ export function billingFiltersToApiPayload(
   if (filters.userIds?.length) body.userIds = [...filters.userIds];
   if (filters.rtoNames?.length) body.rtoNames = [...filters.rtoNames];
   if (filters.workTypes?.length) body.workTypes = [...filters.workTypes];
+  if (filters.statuses?.length) body.statuses = [...filters.statuses];
   if (filters.search?.trim()) body.search = filters.search.trim();
 
-  const hasRange = Boolean(filters.dateFrom || filters.dateTo);
-  if (hasRange) {
-    if (filters.dateFrom) body.dateFrom = filters.dateFrom;
-    if (filters.dateTo) body.dateTo = filters.dateTo;
-  } else if (filters.datePreset) {
-    body.datePreset = filters.datePreset;
+  const dates = normalizeBillingDateRange(filters);
+  if (dates.dateFrom && dates.dateTo) {
+    body.dateFrom = dates.dateFrom;
+    body.dateTo = dates.dateTo;
+  } else if (dates.datePreset) {
+    body.datePreset = dates.datePreset;
   }
 
   if (fileIds?.length) body.fileIds = [...fileIds];
@@ -86,6 +112,7 @@ export function billingPayloadToQueryParams(body: BillingFilesRequestPayload): R
   if (body.userIds?.length) params.userId = body.userIds.join(',');
   if (body.rtoNames?.length) params.rtoName = body.rtoNames.join(',');
   if (body.workTypes?.length) params.workType = body.workTypes.join(',');
+  if (body.statuses?.length) params.status = body.statuses.join(',');
   if (body.search) params.search = body.search;
   if (body.dateFrom) params.dateFrom = body.dateFrom;
   if (body.dateTo) params.dateTo = body.dateTo;
@@ -104,16 +131,19 @@ export function billingFiltersToApiParams(
 }
 
 export function billingFiltersToFileFilterDraft(filters: BillingPickFileFilters): FileFilterDraft {
+  const dates = normalizeBillingDateRange(filters);
   return {
     userId: '',
     userIds: [...(filters.userIds || [])],
     rtoNames: filters.rtoNames || [],
     workType: '',
     workTypes: [...(filters.workTypes || [])],
+    statuses: [...(filters.statuses || [])],
     dealerNames: [],
-    dateFrom: filters.dateFrom,
-    dateTo: filters.dateTo,
-    datePreset: filters.datePreset,
+    dateFrom: dates.dateFrom,
+    dateTo: dates.dateTo,
+    datePreset: dates.datePreset,
+    dateBasis: 'created',
   };
 }
 
@@ -124,6 +154,7 @@ export function billingDrawerFilterCount(filters: BillingPickFileFilters, isAdmi
     (isAdmin ? filters.userIds?.length || 0 : 0) +
     (filters.rtoNames?.length || 0) +
     (filters.workTypes?.length || 0) +
+    (filters.statuses?.length || 0) +
     (dateChip ? 1 : 0)
   );
 }
@@ -134,6 +165,8 @@ export type BillingDrawerChipHandlers = {
   onRemoveUser: (userId: string) => void;
   onRemoveRto: (name: string) => void;
   onRemoveWorkType: (name: string) => void;
+  /** Billing only — File Records drawer omits status chips. */
+  onRemoveStatus?: (status: string) => void;
   onClearDate: () => void;
 };
 
@@ -162,6 +195,13 @@ export function buildBillingDrawerAppliedChips(
       label: name,
       onRemove: () => handlers.onRemoveWorkType(name),
     })),
+    ...(handlers.onRemoveStatus
+      ? (filters.statuses || []).map((status) => ({
+          key: `status-${status}`,
+          label: fileStatusChipLabel(status),
+          onRemove: () => handlers.onRemoveStatus?.(status),
+        }))
+      : []),
     dateChipLabel ? { key: 'date', label: dateChipLabel, onRemove: handlers.onClearDate } : null,
   ].filter((chip): chip is BillingFilterChip => Boolean(chip));
 }
@@ -198,17 +238,24 @@ function fileFilterDraftWorkTypes(draft: FileFilterDraft): string[] {
   return [];
 }
 
-/** Drawer badge count on File Records (excludes search). */
-export function fileRecordsDrawerFilterCount(draft: FileFilterDraft, isAdmin: boolean): number {
-  const dateChip = billingDateFilterLabel({
+function fileRecordsDateChipLabel(draft: FileFilterDraft): string {
+  const label = billingDateFilterLabel({
     userIds: [],
     rtoNames: [],
     workTypes: [],
+    statuses: [],
     search: '',
     dateFrom: draft.dateFrom,
     dateTo: draft.dateTo,
     datePreset: draft.datePreset,
   });
+  if (!label) return '';
+  return draft.dateBasis === 'status' ? `Status · ${label}` : label;
+}
+
+/** Drawer badge count on File Records (excludes search). */
+export function fileRecordsDrawerFilterCount(draft: FileFilterDraft, isAdmin: boolean): number {
+  const dateChip = fileRecordsDateChipLabel(draft);
   return (
     (isAdmin ? fileFilterDraftUserIds(draft).length : 0) +
     (draft.rtoNames?.length || 0) +
@@ -233,13 +280,19 @@ export function buildFileFilterDrawerAppliedChips(
     userIds: fileFilterDraftUserIds(draft),
     rtoNames: draft.rtoNames || [],
     workTypes: fileFilterDraftWorkTypes(draft),
+    statuses: [],
     search: '',
     dateFrom: draft.dateFrom,
     dateTo: draft.dateTo,
     datePreset: draft.datePreset,
   };
+  const chips = buildBillingDrawerAppliedChips(filters, users, isAdmin, handlers).map((chip) => {
+    if (chip.key !== 'date') return chip;
+    const label = fileRecordsDateChipLabel(draft);
+    return label ? { ...chip, label } : chip;
+  });
   return [
-    ...buildBillingDrawerAppliedChips(filters, users, isAdmin, handlers),
+    ...chips,
     ...(draft.dealerNames || []).map((name) => ({
       key: `dealer-${name}`,
       label: name,

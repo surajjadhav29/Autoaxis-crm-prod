@@ -9,7 +9,7 @@ export default function PaperLocationField() {
   return (
     <div className="crm-form-span-all crm-paper-loc-field">
       <span className="crm-field-label">
-        Paper location <span className="crm-field-req">*</span>
+        Document location <span className="crm-field-req">*</span>
       </span>
       <div className="crm-paper-loc-radios mt-1.5" role="radiogroup" aria-label="Paper location">
         {PAPER_LOCATIONS.map((option) => {

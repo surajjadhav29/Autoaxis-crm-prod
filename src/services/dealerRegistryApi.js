@@ -39,6 +39,25 @@ export async function fetchDealerRegistry() {
   throw lastError;
 }
 
+/**
+ * GET /dealers/billing-pick — dealers with at least one billable unpaid file
+ * (Billing → New invoice → Step 1).
+ */
+export async function fetchBillingPickDealers() {
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const { data } = await api.get('/dealers/billing-pick');
+      return data.dealers || [];
+    } catch (err) {
+      lastError = err;
+      if (!isRetryable(err) || attempt === 2) break;
+      await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+    }
+  }
+  throw lastError;
+}
+
 /** GET /dealers/names — id + name for dropdowns. */
 export async function fetchDealerRegistryNames() {
   const { data } = await api.get('/dealers/names');

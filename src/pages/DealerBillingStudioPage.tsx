@@ -3,15 +3,16 @@ import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { useAuth } from '@/features/auth';
 import {
   createDealerBillingInvoice,
+  fetchBillingPickDealers,
   fetchDealerBillableFileIds,
   fetchDealerBillingFilePage,
-  fetchDealerRegistry,
   fetchNextBillingInvoiceNumber,
   resolveDealerBillingFilesForInvoice,
 } from '../services/dealerRegistryApi';
 import { fetchAllUsers } from '../services/userService';
 import { useToast } from '../hooks/useToast';
 import Toast from '../components/Toast';
+import ExpenseModal from '../components/ExpenseModal';
 import BillingDealerPickPanel from '../components/dealer-billing/BillingDealerPickPanel';
 import BillingFileSelectPanel from '../components/dealer-billing/BillingFileSelectPanel';
 import BillingWizardRail from '../components/dealer-billing/BillingWizardRail';
@@ -21,15 +22,18 @@ import { downloadDealerBillPdf } from '../lib/dealerBillingPdf';
 import { shareDealerBillOnWhatsApp } from '../lib/dealerInvoiceWhatsApp';
 import { CrmWhatsAppIcon } from '@/components/icons/CrmIcons';
 import { getApiError } from '../lib/apiError';
-import { billingFiltersToApiPayload } from '../lib/billingFileFilters';
+import {
+  billingFiltersToApiPayload,
+  normalizeBillingDateRange,
+} from '../lib/billingFileFilters';
 import { useIsMobileList } from '../hooks/useIsMobileList';
+import { updateFileExpenses } from '../services/fileService';
 
 const BILLING_FILES_PAGE_SIZE_OPTIONS = [8, 10, 20, 50];
 import { isBillableForInvoice } from '../lib/billingFileSelection';
 import { billingLineFromFileRecord } from '../lib/fileExpenseSplit';
 import type { DealerRegistryRecord } from '@/types/dealer.types';
-import type { FileRecord } from '@/types/file.types';
-import type { FileFilterDraft } from '@/types/file.types';
+import type { FileExpenses, FileFilterDraft, FileRecord } from '@/types/file.types';
 import {
   draftToCreateInvoiceBody,
   parseReceivedInput,
@@ -53,18 +57,23 @@ function formatBillDate(): string {
 }
 
 function draftFromFileFilter(draft: FileFilterDraft, search = ''): BillingPickFileFilters {
-  const hasRange = Boolean(draft.dateFrom || draft.dateTo);
   const userIds =
     draft.userIds?.length ? draft.userIds : draft.userId ? [draft.userId] : [];
   const workTypes =
     draft.workTypes?.length ? draft.workTypes : draft.workType ? [draft.workType] : [];
+  const dates = normalizeBillingDateRange({
+    dateFrom: draft.dateFrom,
+    dateTo: draft.dateTo,
+    datePreset: draft.datePreset,
+  });
   return {
     userIds,
     rtoNames: draft.rtoNames || [],
     workTypes,
-    dateFrom: draft.dateFrom || '',
-    dateTo: draft.dateTo || '',
-    datePreset: hasRange ? '' : draft.datePreset || '',
+    statuses: [...(draft.statuses || [])],
+    dateFrom: dates.dateFrom,
+    dateTo: dates.dateTo,
+    datePreset: dates.datePreset,
     search,
   };
 }
@@ -95,15 +104,14 @@ export default function DealerBillingStudioPage() {
   const selectedFileIdsRef = useRef(selectedFileIds);
   selectedFileIdsRef.current = selectedFileIds;
   const [billNumber, setBillNumber] = useState('');
-  const [generating, setGenerating] = useState(false);
+  const [savingInvoice, setSavingInvoice] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [sharingWhatsApp, setSharingWhatsApp] = useState(false);
   const [dealerStepLoading, setDealerStepLoading] = useState(false);
   const filesRequestRef = useRef<AbortController | null>(null);
   const filesLoadMoreLock = useRef(false);
   const activeInvoiceIdRef = useRef<string | null>(null);
   const persistNewInvoiceRef = useRef<Promise<BillingDraft> | null>(null);
-  /** One-time “select all” when entering step 2 for a dealer; refetches keep user’s selection. */
-  const billingAutoSelectPendingRef = useRef(false);
 
   const [fileFilters, setFileFilters] = useState<BillingPickFileFilters>(EMPTY_BILLING_FILE_FILTERS);
   const [searchInput, setSearchInput] = useState('');
@@ -116,17 +124,20 @@ export default function DealerBillingStudioPage() {
   const [trackingRefreshKey, setTrackingRefreshKey] = useState(0);
   const [billingFilesRefreshKey, setBillingFilesRefreshKey] = useState(0);
   const [invoiceGeneratedAt, setInvoiceGeneratedAt] = useState<string | undefined>();
-  /** Step 3: one save + PDF download per invoice; no repeat download for the same saved bill. */
-  const [invoicePdfDownloaded, setInvoicePdfDownloaded] = useState(false);
+  /** Bump to reload dealers with something left to invoice (after save / back to step 1). */
+  const [dealersRefreshKey, setDealersRefreshKey] = useState(0);
+  const [expenseFile, setExpenseFile] = useState<FileRecord | null>(null);
+  const [savingExpenses, setSavingExpenses] = useState(false);
 
   useEffect(() => {
     activeInvoiceIdRef.current = activeInvoiceId;
   }, [activeInvoiceId]);
 
   useEffect(() => {
+    if (studioMode !== 'new' || step !== 1) return undefined;
     let active = true;
     setDealersLoading(true);
-    fetchDealerRegistry()
+    fetchBillingPickDealers()
       .then((list) => {
         if (active) setDealers(list);
       })
@@ -139,7 +150,7 @@ export default function DealerBillingStudioPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [studioMode, step, dealersRefreshKey]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -222,10 +233,6 @@ export default function DealerBillingStudioPage() {
             selectedFileCacheRef.current.set(file.id, file);
           }
         }
-        if (billingAutoSelectPendingRef.current && result.billableTotal > 0) {
-          billingAutoSelectPendingRef.current = false;
-          await applyBillableSelection(dealer, filters, controller.signal);
-        }
       } catch (err) {
         if (controller.signal.aborted) return;
         if (!append) {
@@ -243,7 +250,7 @@ export default function DealerBillingStudioPage() {
         }
       }
     },
-    [applyBillableSelection, showToast]
+    [showToast]
   );
 
   useEffect(() => () => filesRequestRef.current?.abort(), []);
@@ -299,7 +306,6 @@ export default function DealerBillingStudioPage() {
 
   const handleDealerSelect = async (dealer: DealerRegistryRecord) => {
     if (dealerStepLoading) return;
-    billingAutoSelectPendingRef.current = true;
     selectedFileCacheRef.current.clear();
     setSelectedFileIds(new Set());
     setInvoiceLineFiles([]);
@@ -316,18 +322,74 @@ export default function DealerBillingStudioPage() {
     }
   };
 
+  /** Filter change must drop prior ticks — invoice must not keep off-filter selections. */
+  const clearBillingFileSelection = () => {
+    selectedFileCacheRef.current.clear();
+    setSelectedFileIds(new Set());
+    setInvoiceLineFiles([]);
+  };
+
   const handleApplyFilters = (draft: FileFilterDraft) => {
+    clearBillingFileSelection();
     const next = draftFromFileFilter(draft, debouncedSearch);
     setFilesPage(1);
     setFileFilters(next);
   };
 
   const handleClearFilters = () => {
+    clearBillingFileSelection();
     setFileFilters({ ...EMPTY_BILLING_FILE_FILTERS, search: debouncedSearch });
   };
 
   const patchFileFilters = (patch: Partial<BillingPickFileFilters>) => {
-    setFileFilters((prev) => ({ ...prev, ...patch }));
+    clearBillingFileSelection();
+    setFileFilters((prev) => {
+      const next = { ...prev, ...patch };
+      // Keep date state consistent with Start+End rule (chip clear / partial patches).
+      if (
+        patch.dateFrom !== undefined ||
+        patch.dateTo !== undefined ||
+        patch.datePreset !== undefined
+      ) {
+        const dates = normalizeBillingDateRange(next);
+        next.dateFrom = dates.dateFrom;
+        next.dateTo = dates.dateTo;
+        next.datePreset = dates.datePreset;
+      }
+      return next;
+    });
+  };
+
+  const handleAddExpenses = (file: FileRecord) => {
+    setExpenseFile(file);
+  };
+
+  const handleSaveExpenses = async (expenses: FileExpenses, paymentDone: boolean) => {
+    if (!expenseFile) return;
+    setSavingExpenses(true);
+    try {
+      const result = await updateFileExpenses(expenseFile.id, expenses, user, paymentDone);
+      const saved =
+        result && typeof result === 'object' && 'file' in result
+          ? (result.file as FileRecord)
+          : null;
+      if (saved?.id) {
+        setDealerFiles((prev) => prev.map((f) => (f.id === saved.id ? { ...f, ...saved } : f)));
+        if (selectedFileCacheRef.current.has(saved.id)) {
+          selectedFileCacheRef.current.set(saved.id, {
+            ...selectedFileCacheRef.current.get(saved.id)!,
+            ...saved,
+          });
+        }
+      }
+      setExpenseFile(null);
+      setBillingFilesRefreshKey((k) => k + 1);
+      showToast('Expenses saved successfully');
+    } catch (err) {
+      showToast(getApiError(err, 'Failed to save expenses'), 'error');
+    } finally {
+      setSavingExpenses(false);
+    }
   };
 
   const toggleFile = (fileId: string) => {
@@ -396,7 +458,6 @@ export default function DealerBillingStudioPage() {
     persistNewInvoiceRef.current = null;
     setReceivedInput('0');
     setInvoiceGeneratedAt(undefined);
-    setInvoicePdfDownloaded(false);
     void (async () => {
       setFilesLoading(true);
       try {
@@ -478,6 +539,7 @@ export default function DealerBillingStudioPage() {
     setInvoiceGeneratedAt(saved.generatedAt);
     setTrackingRefreshKey((k) => k + 1);
     setBillingFilesRefreshKey((k) => k + 1);
+    setDealersRefreshKey((k) => k + 1);
     return storedInvoiceToDraft(saved);
   };
 
@@ -499,26 +561,41 @@ export default function DealerBillingStudioPage() {
     return task;
   };
 
-  const handleGeneratePdf = async () => {
+  const invoiceSaved = Boolean(activeInvoiceId);
+  const step3Busy = savingInvoice || downloadingPdf || sharingWhatsApp;
+
+  /** Persist invoice only — no PDF. Disables Save once done; enables Download. */
+  const handleSaveInvoice = async () => {
     const draft = resolveBillingDraft();
-    if (!draft || !selectedDealer) return;
-    setGenerating(true);
+    if (!draft || !selectedDealer || activeInvoiceIdRef.current) return;
+    setSavingInvoice(true);
     try {
-      const pdfDraft = activeInvoiceIdRef.current
-        ? draft
-        : await ensureNewInvoicePersisted(draft);
-      await downloadDealerBillPdf(pdfDraft);
-      setInvoicePdfDownloaded(true);
-      if (!activeInvoiceIdRef.current && pdfDraft.invoiceId) {
-        setTrackingRefreshKey((k) => k + 1);
-      }
+      await ensureNewInvoicePersisted(draft);
       showToast(
-        'Invoice saved and PDF downloaded. Open Invoice history to record payment when the dealer pays.'
+        'Invoice saved. Download the PDF when ready, or record payment later in Invoice history.'
       );
     } catch (err) {
-      showToast(getApiError(err, 'Could not save invoice or generate PDF'), 'error');
+      showToast(getApiError(err, 'Could not save invoice'), 'error');
     } finally {
-      setGenerating(false);
+      setSavingInvoice(false);
+    }
+  };
+
+  /** PDF download — only after the invoice is saved. */
+  const handleDownloadPdf = async () => {
+    const draft = resolveBillingDraft();
+    if (!draft || !selectedDealer || !activeInvoiceIdRef.current) return;
+    setDownloadingPdf(true);
+    try {
+      await downloadDealerBillPdf({
+        ...draft,
+        invoiceId: activeInvoiceIdRef.current,
+      });
+      showToast('PDF downloaded.');
+    } catch (err) {
+      showToast(getApiError(err, 'Could not download PDF'), 'error');
+    } finally {
+      setDownloadingPdf(false);
     }
   };
 
@@ -568,7 +645,9 @@ export default function DealerBillingStudioPage() {
             className={`crm-billing-mode-tab${studioMode === 'new' ? ' crm-billing-mode-tab--active' : ''}`}
             onClick={() => {
               setStudioMode('new');
-              if (step === 2 && selectedDealer) {
+              if (step === 1) {
+                setDealersRefreshKey((k) => k + 1);
+              } else if (step === 2 && selectedDealer) {
                 setBillingFilesRefreshKey((k) => k + 1);
               }
             }}
@@ -656,6 +735,7 @@ export default function DealerBillingStudioPage() {
             onToggle={toggleFile}
             onToggleAll={toggleAllFiles}
             onSelectAllBillable={handleSelectAllBillable}
+            onAddExpenses={handleAddExpenses}
           />
         ) : null}
 
@@ -666,85 +746,105 @@ export default function DealerBillingStudioPage() {
         ) : null}
       </div>
 
-      <div className="crm-billing-footer">
-        {studioMode === 'new' && step > 1 ? (
-          <button
-            type="button"
-            className="crm-btn crm-btn--secondary"
-            onClick={() => {
-              if (step === 2) {
-                filesRequestRef.current?.abort();
-                billingAutoSelectPendingRef.current = false;
-                setDealerFiles([]);
-                setFilesPage(1);
-                setFilesTotal(0);
-                setFilesTotalPages(1);
-                setBillableTotal(0);
-                setSelectedFileIds(new Set());
-                selectedFileCacheRef.current.clear();
-                setInvoiceLineFiles([]);
-                setFilesLoading(false);
-                setFiltersOpen(false);
-              }
-              if (step === 3) {
-                setInvoiceLineFiles([]);
-              }
-              setStep((s) => (s === 3 ? 2 : 1) as BillingWizardStep);
-            }}
-          >
-            <ArrowLeft size={16} />
-            Back
-          </button>
-        ) : (
-          <span />
-        )}
-
-        {studioMode === 'new' && step === 2 ? (
-          <button
-            type="button"
-            className="crm-btn crm-btn--primary"
-            disabled={!canNextStep2}
-            onClick={goToPreviewStep}
-          >
-            Continue to generate the invoice
-            <ArrowRight size={16} />
-          </button>
-        ) : null}
-
-        {studioMode === 'new' && step === 3 ? (
-          <div className="crm-billing-footer-actions">
+      {studioMode === 'new' ? (
+        <div className="crm-billing-footer">
+          {step > 1 ? (
             <button
               type="button"
-              className="crm-btn crm-btn--whatsapp"
-              onClick={() => void handleShareWhatsApp()}
-              disabled={sharingWhatsApp || generating || !billingDraft}
+              className="crm-btn crm-btn--secondary"
+              onClick={() => {
+                if (step === 2) {
+                  filesRequestRef.current?.abort();
+                  setDealerFiles([]);
+                  setFilesPage(1);
+                  setFilesTotal(0);
+                  setFilesTotalPages(1);
+                  setBillableTotal(0);
+                  setSelectedFileIds(new Set());
+                  selectedFileCacheRef.current.clear();
+                  setInvoiceLineFiles([]);
+                  setFilesLoading(false);
+                  setFiltersOpen(false);
+                  setDealersRefreshKey((k) => k + 1);
+                }
+                if (step === 3) {
+                  setInvoiceLineFiles([]);
+                }
+                setStep((s) => (s === 3 ? 2 : 1) as BillingWizardStep);
+              }}
             >
-              <CrmWhatsAppIcon />
-              {sharingWhatsApp ? 'Opening…' : 'Share on WhatsApp'}
+              <ArrowLeft size={16} />
+              Back
             </button>
+          ) : (
+            <span />
+          )}
+
+          {step === 2 ? (
             <button
               type="button"
               className="crm-btn crm-btn--primary"
-              onClick={() => void handleGeneratePdf()}
-              disabled={
-                generating || sharingWhatsApp || !billingDraft || invoicePdfDownloaded
-              }
-              title={
-                invoicePdfDownloaded
-                  ? 'This invoice was already saved and downloaded. Start a new invoice to download again.'
-                  : undefined
-              }
+              disabled={!canNextStep2}
+              onClick={goToPreviewStep}
             >
-              {generating
-                ? 'Generating…'
-                : invoicePdfDownloaded
-                  ? 'Invoice downloaded'
-                  : 'Save & download invoice (PDF)'}
-              {!invoicePdfDownloaded && !generating ? <ArrowRight size={16} /> : null}
+              Continue to generate the invoice
+              <ArrowRight size={16} />
             </button>
-          </div>
-        ) : null}
-      </div>
+          ) : null}
+
+          {step === 3 ? (
+            <div className="crm-billing-footer-actions">
+              <button
+                type="button"
+                className="crm-btn crm-btn--whatsapp"
+                onClick={() => void handleShareWhatsApp()}
+                disabled={step3Busy || !billingDraft}
+              >
+                <CrmWhatsAppIcon />
+                {sharingWhatsApp ? 'Opening…' : 'Share on WhatsApp'}
+              </button>
+              <button
+                type="button"
+                className="crm-btn crm-btn--secondary"
+                onClick={() => void handleSaveInvoice()}
+                disabled={step3Busy || !billingDraft || invoiceSaved}
+                title={
+                  invoiceSaved
+                    ? 'Invoice already saved. Use Download for the PDF.'
+                    : 'Save this invoice to Invoice history'
+                }
+              >
+                {savingInvoice ? 'Saving…' : invoiceSaved ? 'Saved' : 'Save invoice'}
+              </button>
+              <button
+                type="button"
+                className="crm-btn crm-btn--primary"
+                onClick={() => void handleDownloadPdf()}
+                disabled={step3Busy || !billingDraft || !invoiceSaved}
+                title={
+                  invoiceSaved
+                    ? 'Download invoice PDF'
+                    : 'Save the invoice first, then download the PDF'
+                }
+              >
+                {downloadingPdf ? 'Downloading…' : 'Download PDF'}
+                {!downloadingPdf && invoiceSaved ? <ArrowRight size={16} /> : null}
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      <ExpenseModal
+        file={expenseFile}
+        open={!!expenseFile}
+        onClose={() => {
+          if (savingExpenses) return;
+          setExpenseFile(null);
+        }}
+        onSave={handleSaveExpenses}
+        saving={savingExpenses}
+      />
 
       {toast ? (
         <Toast key={toast.id} message={toast.message} variant={toast.variant} onClose={clearToast} />
