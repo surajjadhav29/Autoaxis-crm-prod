@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { MapPinned, X, CheckCircle } from 'lucide-react';
+import { MapPinned, Search, X, CheckCircle } from 'lucide-react';
 import { useIsMobileList } from '../hooks/useIsMobileList';
 import {
   fetchFieldAgents,
-  createFieldAgent,
-  updateFieldAgent,
-  deleteFieldAgent,
-  findFieldAgentForRto,
-  fieldAgentRtoLabel,
+  createFieldAgentOffice,
+  updateFieldAgentOffice,
+  deleteFieldAgentOffice,
+  groupFieldAgentsByRto,
   rtoMatchKey,
 } from '../services/fieldAgentService';
 import { useToast } from '../hooks/useToast';
@@ -17,11 +16,15 @@ import ConfirmModal from '../components/ConfirmModal';
 import Pagination from '../components/Pagination';
 import Toast from '../components/Toast';
 import { getApiError } from '../lib/apiError';
-import type { FieldAgent } from '@/types/fieldAgent.types';
+import type { FieldAgent, FieldAgentOffice } from '@/types/fieldAgent.types';
 
 interface FieldAgentForm {
   name: string;
   mobile: string;
+  description: string;
+  name2: string;
+  mobile2: string;
+  description2: string;
   rtoName: string;
   address: string;
 }
@@ -32,6 +35,10 @@ const PAGE_SIZE_OPTIONS = [15, 20];
 const emptyForm: FieldAgentForm = {
   name: '',
   mobile: '',
+  description: '',
+  name2: '',
+  mobile2: '',
+  description2: '',
   rtoName: '',
   address: '',
 };
@@ -40,26 +47,28 @@ const inputClass =
   'w-full min-h-11 min-w-0 rounded-[10px] border border-[#d8dde5] bg-white px-3.5 py-2.5 text-sm text-[#1e242c] outline-none transition focus:border-[#1a73e8] focus:shadow-[0_0_0_3px_rgba(26,115,232,0.14)]';
 
 const btnPrimary =
-  'inline-flex items-center justify-center gap-2 rounded-lg border-0 bg-[#1a73e8] px-5 py-2.5 text-[13px] font-medium text-white transition hover:bg-[#1557b0] disabled:cursor-not-allowed disabled:opacity-55 min-w-[140px]';
+  'inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border-0 bg-[#1a73e8] px-4 py-2.5 text-[13px] font-medium text-white transition hover:bg-[#1557b0] disabled:cursor-not-allowed disabled:opacity-55 min-w-[120px] sm:min-w-[140px] sm:px-5';
 
 const btnSecondary =
-  'inline-flex items-center justify-center gap-2 rounded-lg border border-[#dbdfe5] bg-white px-5 py-2.5 text-[13px] font-medium text-[#1e242c] transition hover:bg-[#f9fafb] min-w-[140px]';
+  'inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-[#dbdfe5] bg-white px-4 py-2.5 text-[13px] font-medium text-[#1e242c] transition hover:bg-[#f9fafb] min-w-[120px] sm:min-w-[140px] sm:px-5';
 
 export default function FieldAgentsPage() {
   const [agents, setAgents] = useState<FieldAgent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0]);
   const [formMounted, setFormMounted] = useState(false);
   const [formVisible, setFormVisible] = useState(false);
   const [formMode, setFormMode] = useState<'create' | 'edit'>('create');
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingAgentIds, setEditingAgentIds] = useState<string[]>([]);
   const [form, setForm] = useState<FieldAgentForm>(emptyForm);
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<FieldAgent | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<FieldAgentOffice | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const { toast, showToast, clearToast } = useToast();
@@ -67,59 +76,62 @@ export default function FieldAgentsPage() {
   const isEditing = formMode === 'edit';
   const isMobileList = useIsMobileList();
 
+  const offices = useMemo(() => groupFieldAgentsByRto(agents), [agents]);
+
+  /** RTOs that already have an office entry (disable on create; allow current on edit). */
   const disabledRtoMatchKeys = useMemo(() => {
     const keys = new Set<string>();
-    for (const agent of agents) {
-      if (isEditing && agent.id === editingId) continue;
-      const key = rtoMatchKey(fieldAgentRtoLabel(agent));
-      if (key) keys.add(key);
+    const editingKey =
+      isEditing && form.rtoName ? rtoMatchKey(form.rtoName) : '';
+    for (const office of offices) {
+      const key = rtoMatchKey(office.rtoName);
+      if (!key) continue;
+      if (editingKey && key === editingKey) continue;
+      keys.add(key);
     }
     return keys;
-  }, [agents, isEditing, editingId]);
+  }, [offices, isEditing, form.rtoName]);
 
-  const rtoConflict = useMemo(() => {
-    if (!form.rtoName.trim()) return null;
-    return findFieldAgentForRto(agents, form.rtoName, {
-      excludeId: isEditing && editingId ? editingId : undefined,
-    });
-  }, [agents, form.rtoName, isEditing, editingId]);
+  const rtoTaken =
+    !isEditing &&
+    Boolean(form.rtoName.trim()) &&
+    disabledRtoMatchKeys.has(rtoMatchKey(form.rtoName));
 
-  const createBlocked = !isEditing && Boolean(rtoConflict);
-  const updateRtoBlocked = isEditing && Boolean(rtoConflict);
-
-  const totalPages = Math.max(1, Math.ceil(agents.length / pageSize));
-  const pagedAgents = useMemo(() => {
-    if (isMobileList) return agents.slice(0, page * pageSize);
+  const totalPages = Math.max(1, Math.ceil(offices.length / pageSize));
+  const pagedOffices = useMemo(() => {
+    if (isMobileList) return offices.slice(0, page * pageSize);
     const start = (page - 1) * pageSize;
-    return agents.slice(start, start + pageSize);
-  }, [agents, page, pageSize, isMobileList]);
+    return offices.slice(start, start + pageSize);
+  }, [offices, page, pageSize, isMobileList]);
 
   const handleLoadMore = useCallback(() => {
     if (!isMobileList || page >= totalPages) return;
     setPage((current) => (current < totalPages ? current + 1 : current));
   }, [isMobileList, page, totalPages]);
 
-  const loadAgents = async () => {
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedSearch(searchInput.trim()), 350);
+    return () => window.clearTimeout(t);
+  }, [searchInput]);
+
+  const loadAgents = useCallback(async () => {
     setLoading(true);
     try {
-      const list = await fetchFieldAgents();
+      const list = await fetchFieldAgents({ search: debouncedSearch });
       setAgents(list);
       setError('');
-      setPage((prev) => {
-        const pages = Math.max(1, Math.ceil(list.length / pageSize));
-        return Math.min(prev, pages);
-      });
+      setPage(1);
     } catch {
       setAgents([]);
       setError('Failed to load field agents.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [debouncedSearch]);
 
   useEffect(() => {
     loadAgents();
-  }, []);
+  }, [loadAgents]);
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -141,7 +153,7 @@ export default function FieldAgentsPage() {
     window.setTimeout(() => {
       setFormMounted(false);
       setFormMode('create');
-      setEditingId(null);
+      setEditingAgentIds([]);
       setForm(emptyForm);
       setFormError('');
       setFormSuccess(false);
@@ -154,21 +166,27 @@ export default function FieldAgentsPage() {
       return;
     }
     setFormMode('create');
-    setEditingId(null);
+    setEditingAgentIds([]);
     setForm(emptyForm);
     setFormError('');
     setFormSuccess(false);
     openForm();
   };
 
-  const handleEdit = (item: FieldAgent) => {
+  const handleEdit = (office: FieldAgentOffice) => {
+    const a1 = office.agents[0];
+    const a2 = office.agents[1];
     setFormMode('edit');
-    setEditingId(item.id);
+    setEditingAgentIds(office.agents.map((a) => a.id));
     setForm({
-      name: item.name || '',
-      mobile: item.mobile || '',
-      rtoName: item.rtoName || item.district || '',
-      address: item.address || '',
+      name: a1?.name || '',
+      mobile: a1?.mobile || '',
+      description: a1?.description || '',
+      name2: a2?.name || '',
+      mobile2: a2?.mobile || '',
+      description2: a2?.description || '',
+      rtoName: office.rtoName || '',
+      address: office.address || '',
     });
     setFormError('');
     setFormSuccess(false);
@@ -181,42 +199,67 @@ export default function FieldAgentsPage() {
 
     const name = form.name.trim();
     const mobile = form.mobile.replace(/\D/g, '').slice(-10);
+    const description = form.description.trim();
+    const name2 = form.name2.trim();
+    const mobile2 = form.mobile2.replace(/\D/g, '').slice(-10);
+    const description2 = form.description2.trim();
     const rtoName = form.rtoName.trim();
     const address = form.address.trim();
 
     if (!name || !rtoName) {
-      setFormError('Name and RTO are required.');
+      setFormError('Field Agent 1 name and RTO are required.');
       return;
     }
-    if (mobile.length !== 10) {
-      setFormError('Mobile must be a 10-digit number.');
+    if (mobile && mobile.length !== 10) {
+      setFormError('Field Agent 1 mobile must be a 10-digit number.');
       return;
     }
 
-    const conflict = findFieldAgentForRto(agents, rtoName, {
-      excludeId: isEditing && editingId ? editingId : undefined,
-    });
-    if (conflict) {
-      setFormError(
-        `This RTO already has a field agent (${conflict.name}). Edit or remove them first.`
-      );
+    const wantSecond = Boolean(name2 || mobile2 || description2);
+    if (wantSecond) {
+      if (!name2) {
+        setFormError('Field Agent 2 name is required when adding a second agent.');
+        return;
+      }
+      if (mobile2 && mobile2.length !== 10) {
+        setFormError('Field Agent 2 mobile must be a 10-digit number.');
+        return;
+      }
+      if (name.toLowerCase() === name2.toLowerCase()) {
+        setFormError('Field Agent 1 and Field Agent 2 must have different names.');
+        return;
+      }
+    }
+
+    if (!isEditing && rtoTaken) {
+      setFormError('This RTO already has a field-agent entry. Edit that entry instead.');
       return;
     }
 
     setSubmitting(true);
     try {
-      if (isEditing && editingId) {
-        await updateFieldAgent(editingId, { name, mobile, rtoName, address });
-        showToast('Field agent updated');
+      const agent1 = { name, mobile, description };
+      const agent2 = wantSecond
+        ? { name: name2, mobile: mobile2, description: description2 }
+        : undefined;
+      if (isEditing) {
+        await updateFieldAgentOffice({
+          rtoName,
+          address,
+          agent1,
+          agent2,
+          agentIds: editingAgentIds,
+        });
+        showToast('Field agent entry updated');
       } else {
-        await createFieldAgent({ name, mobile, rtoName, address });
-        showToast('Field agent created');
+        await createFieldAgentOffice({ rtoName, address, agent1, agent2 });
+        showToast(wantSecond ? 'Field agent entry created (2 agents)' : 'Field agent entry created');
       }
       setFormSuccess(true);
       await loadAgents();
       window.setTimeout(() => closeForm(), 900);
     } catch (err) {
-      setFormError(getApiError(err, 'Failed to save field agent.'));
+      setFormError(getApiError(err, 'Failed to save field agent entry.'));
     } finally {
       setSubmitting(false);
     }
@@ -227,12 +270,15 @@ export default function FieldAgentsPage() {
     setDeleteError('');
     setDeleting(true);
     try {
-      await deleteFieldAgent(deleteTarget.id);
+      await deleteFieldAgentOffice({
+        rtoName: deleteTarget.rtoName,
+        agentIds: deleteTarget.agents.map((a) => a.id),
+      });
       setDeleteTarget(null);
       await loadAgents();
-      showToast('Field agent deleted');
+      showToast('Field agent entry deleted');
     } catch (err) {
-      setDeleteError(getApiError(err, 'Failed to delete field agent.'));
+      setDeleteError(getApiError(err, 'Failed to delete field agent entry.'));
     } finally {
       setDeleting(false);
     }
@@ -245,7 +291,7 @@ export default function FieldAgentsPage() {
           <div className="crm-page-head">
             <h1 className="crm-title">Field Agents</h1>
             <p className="crm-page-subtitle m-0 text-sm text-[#667488]">
-              District RTO contacts for file tracking — they do not log into the CRM.
+              One entry per RTO — Field Agent 1 required, Field Agent 2 optional.
             </p>
           </div>
           <button type="button" onClick={handleCreateToggle} className="crm-btn crm-btn--primary">
@@ -264,48 +310,45 @@ export default function FieldAgentsPage() {
                 : 'mb-0 grid-rows-[0fr] opacity-0 -translate-y-2.5'
             }`}
             role="region"
-            aria-label={isEditing ? 'Edit field agent form' : 'Create field agent form'}
+            aria-label={isEditing ? 'Edit field agent entry' : 'Create field agent entry'}
           >
             <div className="min-h-0 overflow-y-auto overscroll-contain">
               <div className="w-full max-w-full rounded-lg border border-[#dbdfe5] bg-white">
                 {formSuccess ? (
                   <div className="flex items-center gap-2.5 px-5 py-6 text-sm text-[#1d7f50] md:px-6">
                     <CheckCircle size={20} className="shrink-0 text-green-500" />
-                    {isEditing ? 'Field agent updated!' : 'Field agent created!'}
+                    {isEditing ? 'Field agent entry updated!' : 'Field agent entry created!'}
                   </div>
                 ) : (
                   <form onSubmit={handleSubmit} className="flex flex-col">
                     <div className="flex flex-col gap-5 p-5 md:p-6">
                       <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="flex flex-col gap-1.5">
-                          <label className="text-[13px] font-medium text-[#3d4654]">Name *</label>
-                          <input
-                            name="name"
-                            className={inputClass}
-                            placeholder="Agent full name"
-                            value={form.name}
-                            onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                        <div className="flex flex-col gap-1.5 sm:col-span-2 sm:max-w-md">
+                          <RtoSelectControl
+                            label="RTO office *"
                             required
+                            value={form.rtoName}
+                            onChange={(rtoName) => {
+                              setForm((prev) => ({ ...prev, rtoName }));
+                              setFormError('');
+                            }}
+                            placeholder="Select RTO"
+                            disabledRtoMatchKeys={disabledRtoMatchKeys}
+                            disabledRtoTitle="This RTO already has a field-agent entry"
                           />
+                          {rtoTaken ? (
+                            <p className="m-0 text-[12px] font-medium text-[#dc0024]">
+                              This RTO already has an entry. Edit that row instead of creating a new
+                              one.
+                            </p>
+                          ) : (
+                            <p className="m-0 text-[12px] text-[#667488]">
+                              One table row per RTO. Agent 1 is required; Agent 2 is optional.
+                              Mobile and description are optional for both.
+                            </p>
+                          )}
                         </div>
-                        <div className="flex flex-col gap-1.5">
-                          <label className="text-[13px] font-medium text-[#3d4654]">Mobile *</label>
-                          <input
-                            name="mobile"
-                            className={inputClass}
-                            placeholder="10-digit mobile"
-                            inputMode="numeric"
-                            maxLength={10}
-                            value={form.mobile}
-                            onChange={(e) =>
-                              setForm((prev) => ({
-                                ...prev,
-                                mobile: e.target.value.replace(/\D/g, '').slice(0, 10),
-                              }))
-                            }
-                            required
-                          />
-                        </div>
+
                         <div className="flex flex-col gap-1.5 sm:col-span-2">
                           <label className="text-[13px] font-medium text-[#3d4654]">Address</label>
                           <textarea
@@ -319,31 +362,107 @@ export default function FieldAgentsPage() {
                             }
                           />
                         </div>
-                        <div className="flex flex-col gap-1.5 sm:col-span-2 sm:max-w-md">
-                          <RtoSelectControl
-                            label="RTO office *"
+
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-[13px] font-medium text-[#3d4654]">
+                            Field Agent 1 *
+                          </label>
+                          <input
+                            name="name"
+                            className={inputClass}
+                            placeholder="Agent full name"
+                            value={form.name}
+                            onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
                             required
-                            value={form.rtoName}
-                            onChange={(rtoName) => {
-                              setForm((prev) => ({ ...prev, rtoName }));
-                              setFormError('');
-                            }}
-                            placeholder="Select RTO"
-                            disabledRtoMatchKeys={disabledRtoMatchKeys}
-                            disabledRtoTitle="This RTO already has a field agent"
                           />
-                          {rtoConflict ? (
-                            <p className="m-0 text-[12px] font-medium text-[#dc0024]">
-                              {fieldAgentRtoLabel(rtoConflict)} is already assigned to{' '}
-                              <strong>{rtoConflict.name}</strong>. Choose another RTO or edit that
-                              agent.
-                            </p>
-                          ) : (
-                            <p className="m-0 text-[12px] text-[#667488]">
-                              Each RTO office can have only one field agent. Files auto-map to that
-                              agent when you set the same RTO on a file.
-                            </p>
-                          )}
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-[13px] font-medium text-[#3d4654]">
+                            Mobile 1{' '}
+                            <span className="font-normal text-[#667488]">(optional)</span>
+                          </label>
+                          <input
+                            name="mobile"
+                            className={inputClass}
+                            placeholder="10-digit mobile"
+                            inputMode="numeric"
+                            maxLength={10}
+                            value={form.mobile}
+                            onChange={(e) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                mobile: e.target.value.replace(/\D/g, '').slice(0, 10),
+                              }))
+                            }
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1.5 sm:col-span-2">
+                          <label className="text-[13px] font-medium text-[#3d4654]">
+                            Description 1{' '}
+                            <span className="font-normal text-[#667488]">(optional)</span>
+                          </label>
+                          <textarea
+                            name="description"
+                            className={`${inputClass} min-h-[72px] resize-y py-2.5`}
+                            placeholder="Notes about agent 1"
+                            rows={2}
+                            value={form.description}
+                            onChange={(e) =>
+                              setForm((prev) => ({ ...prev, description: e.target.value }))
+                            }
+                          />
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-[13px] font-medium text-[#3d4654]">
+                            Field Agent 2{' '}
+                            <span className="font-normal text-[#667488]">(optional)</span>
+                          </label>
+                          <input
+                            name="name2"
+                            className={inputClass}
+                            placeholder="Second agent name"
+                            value={form.name2}
+                            onChange={(e) =>
+                              setForm((prev) => ({ ...prev, name2: e.target.value }))
+                            }
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-[13px] font-medium text-[#3d4654]">
+                            Mobile 2{' '}
+                            <span className="font-normal text-[#667488]">(optional)</span>
+                          </label>
+                          <input
+                            name="mobile2"
+                            className={inputClass}
+                            placeholder="10-digit mobile"
+                            inputMode="numeric"
+                            maxLength={10}
+                            value={form.mobile2}
+                            onChange={(e) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                mobile2: e.target.value.replace(/\D/g, '').slice(0, 10),
+                              }))
+                            }
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1.5 sm:col-span-2">
+                          <label className="text-[13px] font-medium text-[#3d4654]">
+                            Description 2{' '}
+                            <span className="font-normal text-[#667488]">(optional)</span>
+                          </label>
+                          <textarea
+                            name="description2"
+                            className={`${inputClass} min-h-[72px] resize-y py-2.5`}
+                            placeholder="Notes about agent 2"
+                            rows={2}
+                            value={form.description2}
+                            onChange={(e) =>
+                              setForm((prev) => ({ ...prev, description2: e.target.value }))
+                            }
+                          />
                         </div>
                       </div>
 
@@ -352,13 +471,17 @@ export default function FieldAgentsPage() {
                       ) : null}
                     </div>
 
-                    <div className="crm-field-agents-form-actions flex flex-wrap gap-3 border-t border-[#eef0f3] bg-white px-5 py-4 md:px-6">
+                    <div className="crm-field-agents-form-actions flex flex-nowrap items-center justify-center gap-3 border-t border-[#eef0f3] bg-white px-5 py-4 md:px-6">
                       <button
                         type="submit"
                         className={btnPrimary}
-                        disabled={submitting || createBlocked || updateRtoBlocked}
+                        disabled={submitting || rtoTaken}
                       >
-                        {submitting ? 'Saving…' : isEditing ? 'Update Agent' : 'Create Agent'}
+                        {submitting
+                          ? 'Saving…'
+                          : isEditing
+                            ? 'Update Entry'
+                            : 'Create Entry'}
                       </button>
                       <button type="button" className={btnSecondary} onClick={closeForm}>
                         Cancel
@@ -371,6 +494,30 @@ export default function FieldAgentsPage() {
           </div>
         )}
 
+        <div className="mb-3 flex flex-wrap items-center gap-3">
+          <div className="crm-search-wrap relative min-w-[220px] max-w-md flex-1">
+            <Search size={16} className="crm-search-icon" aria-hidden />
+            <input
+              type="search"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Search by RTO or agent name…"
+              className="crm-search w-full"
+              aria-label="Search field agents"
+            />
+            {searchInput ? (
+              <button
+                type="button"
+                className="crm-search-clear"
+                onClick={() => setSearchInput('')}
+                aria-label="Clear search"
+              >
+                <X size={14} />
+              </button>
+            ) : null}
+          </div>
+        </div>
+
         {error ? (
           <p className="m-0 rounded-lg border border-[#f5c2c7] bg-[#fff5f5] px-4 py-3 text-sm text-[#dc0024]">
             {error}
@@ -379,17 +526,23 @@ export default function FieldAgentsPage() {
 
         <div className="figma-table-card">
           <FieldAgentTable
-            agents={pagedAgents}
+            offices={pagedOffices}
             loading={loading}
             hasMore={isMobileList && page < totalPages}
             onLoadMore={handleLoadMore}
             onEdit={handleEdit}
-            onDelete={(item) => {
+            onDelete={(office) => {
               setDeleteError('');
-              setDeleteTarget(item);
+              setDeleteTarget(office);
             }}
+            emptyTitle={debouncedSearch ? 'No matching field agents' : 'No field agents yet'}
+            emptyDescription={
+              debouncedSearch
+                ? 'Try a different RTO code or agent name.'
+                : 'Add district RTO contacts here — they are used to track files, not CRM login users.'
+            }
           />
-          {!loading && agents.length > 0 ? (
+          {!loading && offices.length > 0 ? (
             <div className="hidden lg:block">
               <Pagination
                 currentPage={page}
@@ -408,10 +561,10 @@ export default function FieldAgentsPage() {
 
         <ConfirmModal
           open={Boolean(deleteTarget)}
-          title="Delete field agent?"
+          title="Delete field agent entry?"
           description={
             deleteTarget
-              ? `Remove “${deleteTarget.name}”? Files linked to this agent will show as unassigned.`
+              ? `Remove the ${deleteTarget.rtoName} entry (all agents for this RTO)? Files linked to these agents will show as unassigned.`
               : ''
           }
           error={deleteError || undefined}

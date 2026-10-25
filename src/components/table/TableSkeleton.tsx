@@ -49,7 +49,14 @@ const COLUMN_SETS: Record<SkeletonVariant, FigmaCellVariant[]> = {
   ],
   staff: ['staffname', 'staffemail', 'staffuser', 'staffstatus', 'staffdate', 'stafflogin', 'staffactions'],
   worktypes: ['worktypename', 'worktypedocs', 'worktypeactions'],
-  fieldagents: ['fieldagentname', 'fieldagentmobile', 'fieldagentrto', 'fieldagentaddress', 'fieldagentactions'],
+  fieldagents: [
+    'fieldagentname',
+    'fieldagentmobile',
+    'fieldagentdesc',
+    'fieldagentrto',
+    'fieldagentaddress',
+    'fieldagentactions',
+  ],
   cards: ['client', 'filestatus'],
 };
 
@@ -66,6 +73,7 @@ const BAR_WIDTH: Partial<Record<FigmaCellVariant, string>> = {
   fieldagent: '72%',
   fieldagentname: '70%',
   fieldagentmobile: '62%',
+  fieldagentdesc: '72%',
   fieldagentrto: '68%',
   fieldagentaddress: '75%',
   fieldagentactions: '70%',

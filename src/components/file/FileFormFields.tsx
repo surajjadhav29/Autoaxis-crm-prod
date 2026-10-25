@@ -2,13 +2,17 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFormikContext } from 'formik';
 import { Building2, Car, UserCircle, Files } from 'lucide-react';
 import { upper, digits, alnum5, vehicle, isSpecialDealer } from '@/lib/fileForm';
-import { FormInput, FormTextarea, FormSection } from '@/components/form/FormField';
+import { FormInput, FormSelect, FormTextarea, FormSection } from '@/components/form/FormField';
 import { WorkTypeSelect } from '@/components/form/WorkTypeSelect';
 import { DealerSelect } from '@/components/form/DealerSelect';
 import { RtoSelect } from '@/components/form/RtoSelect';
 import DocumentChecklist from '@/components/form/DocumentChecklist';
 import { fetchWorkTypes } from '@/services/workTypeService';
-import { fetchFieldAgents, pickFieldAgentForRto } from '@/services/fieldAgentService';
+import {
+  fetchFieldAgents,
+  listFieldAgentsForRto,
+  pickFieldAgentForRto,
+} from '@/services/fieldAgentService';
 import type { FieldAgent } from '@/types/fieldAgent.types';
 import PaperLocationField from './PaperLocationField';
 import type { FileFormValues, WorkType } from '@/types/file.types';
@@ -63,20 +67,61 @@ export default function FileFormFields({ newOwnerRequired = false }: FileFormFie
     };
   }, []);
 
+  const agentsForRto = useMemo(
+    () => listFieldAgentsForRto(fieldAgents, values.rtoName || '', { activeOnly: true }),
+    [fieldAgents, values.rtoName]
+  );
+
+  const fieldAgentOptions = useMemo(
+    () =>
+      agentsForRto.map((agent) => ({
+        value: agent.id,
+        label: [agent.name, agent.mobile].filter(Boolean).join(' · '),
+      })),
+    [agentsForRto]
+  );
+
+  /** 2+ agents for this RTO → show picker; 0–1 → auto-map, no dropdown. */
+  const showFieldAgentPicker = agentsForRto.length >= 2;
+
   useEffect(() => {
     const current = values.rtoName || '';
-
-    if (prevRtoRef.current === null) {
+    const rtoChanged =
+      prevRtoRef.current !== null && prevRtoRef.current !== current;
+    if (prevRtoRef.current === null || rtoChanged) {
       prevRtoRef.current = current;
+    }
+
+    if (!current) {
+      if (values.fieldAgentId) setFieldValue('fieldAgentId', '', false);
+      return;
+    }
+    if (!fieldAgents.length) return;
+
+    const matches = listFieldAgentsForRto(fieldAgents, current, { activeOnly: true });
+    const currentId = values.fieldAgentId || '';
+    const stillValid = matches.some((a) => a.id === currentId);
+
+    if (matches.length === 0) {
+      if (currentId) setFieldValue('fieldAgentId', '', false);
       return;
     }
 
-    if (prevRtoRef.current !== current) {
-      prevRtoRef.current = current;
-      const picked = pickFieldAgentForRto(fieldAgents, current);
-      setFieldValue('fieldAgentId', picked?.id || '', false);
+    if (matches.length === 1) {
+      if (currentId !== matches[0].id) {
+        setFieldValue('fieldAgentId', matches[0].id, false);
+      }
+      return;
     }
-  }, [values.rtoName, fieldAgents, setFieldValue]);
+
+    // 2+ agents: keep selection if still valid for this RTO; else default first.
+    if (rtoChanged || !stillValid) {
+      const picked = pickFieldAgentForRto(fieldAgents, current);
+      if (picked?.id && picked.id !== currentId) {
+        setFieldValue('fieldAgentId', picked.id, false);
+      }
+    }
+  }, [values.rtoName, values.fieldAgentId, fieldAgents, setFieldValue]);
 
   const workTypeKey = (name?: string) =>
     String(name || '')
@@ -221,6 +266,15 @@ export default function FileFormFields({ newOwnerRequired = false }: FileFormFie
             hint={!dealerMobRequired && values.dealerName ? 'Not required for finance dealers' : undefined}
           />
           <RtoSelect name="rtoName" required />
+          {showFieldAgentPicker ? (
+            <FormSelect
+              label="Field agent"
+              name="fieldAgentId"
+              required
+              options={fieldAgentOptions}
+              placeholder="Select field agent"
+            />
+          ) : null}
           <PaperLocationField />
           <div className="crm-form-span-all">
             <FormTextarea label="Remarks" name="remarks" rows={3} placeholder="Any extra notes (optional)" transform={upper} />

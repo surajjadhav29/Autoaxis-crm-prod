@@ -24,17 +24,10 @@ import { CrmWhatsAppIcon } from '@/components/icons/CrmIcons';
 import { getApiError } from '../lib/apiError';
 import {
   billingFiltersToApiPayload,
-<<<<<<< HEAD
   normalizeBillingDateRange,
-} from '../lib/billingFileFilters';
-import { useIsMobileList } from '../hooks/useIsMobileList';
-import { updateFileExpenses } from '../services/fileService';
-
-const BILLING_FILES_PAGE_SIZE_OPTIONS = [8, 10, 20, 50];
-=======
   BILLING_FILES_PAGE_SIZE_MAX,
 } from '../lib/billingFileFilters';
->>>>>>> 32693cab7b9956e6a71c81e09d2970768c4b9f06
+import { updateFileExpenses } from '../services/fileService';
 import { isBillableForInvoice } from '../lib/billingFileSelection';
 import { billingLineFromFileRecord } from '../lib/fileExpenseSplit';
 import type { DealerRegistryRecord } from '@/types/dealer.types';
@@ -108,8 +101,10 @@ export default function DealerBillingStudioPage() {
   const [sharingWhatsApp, setSharingWhatsApp] = useState(false);
   const [dealerStepLoading, setDealerStepLoading] = useState(false);
   const filesRequestRef = useRef<AbortController | null>(null);
+  const billingAutoSelectPendingRef = useRef(false);
   const activeInvoiceIdRef = useRef<string | null>(null);
   const persistNewInvoiceRef = useRef<Promise<BillingDraft> | null>(null);
+  const [invoicePdfDownloaded, setInvoicePdfDownloaded] = useState(false);
 
   const [fileFilters, setFileFilters] = useState<BillingPickFileFilters>(EMPTY_BILLING_FILE_FILTERS);
   const [searchInput, setSearchInput] = useState('');
@@ -227,8 +222,6 @@ export default function DealerBillingStudioPage() {
           }
           page += 1;
         }
-<<<<<<< HEAD
-=======
 
         setDealerFiles(merged);
         setBillableTotal(billableTotal);
@@ -237,7 +230,6 @@ export default function DealerBillingStudioPage() {
           billingAutoSelectPendingRef.current = false;
           await applyBillableSelection(dealer, filters, controller.signal);
         }
->>>>>>> 32693cab7b9956e6a71c81e09d2970768c4b9f06
       } catch (err) {
         if (controller.signal.aborted) return;
         setDealerFiles([]);
@@ -249,7 +241,7 @@ export default function DealerBillingStudioPage() {
         }
       }
     },
-    [showToast]
+    [showToast, applyBillableSelection]
   );
 
   useEffect(() => () => filesRequestRef.current?.abort(), []);
@@ -284,6 +276,7 @@ export default function DealerBillingStudioPage() {
     setFileFilters(EMPTY_BILLING_FILE_FILTERS);
     setSearchInput('');
     setDebouncedSearch('');
+    billingAutoSelectPendingRef.current = true;
     setDealerStepLoading(true);
     try {
       setStep(2);
@@ -564,17 +557,12 @@ export default function DealerBillingStudioPage() {
   /** Persist invoice only — no PDF. Disables Save once done; enables Download. */
   const handleSaveInvoice = async () => {
     const draft = resolveBillingDraft();
-<<<<<<< HEAD
     if (!draft || !selectedDealer || activeInvoiceIdRef.current) return;
-    setSavingInvoice(true);
-=======
-    if (!draft || !selectedDealer) return;
     if (!draft.lines.length) {
       showToast('Select at least one file before generating the invoice.', 'error');
       return;
     }
-    setGenerating(true);
->>>>>>> 32693cab7b9956e6a71c81e09d2970768c4b9f06
+    setSavingInvoice(true);
     try {
       await ensureNewInvoicePersisted(draft);
       showToast(
@@ -736,11 +724,8 @@ export default function DealerBillingStudioPage() {
             onToggle={toggleFile}
             onToggleAll={toggleAllFiles}
             onSelectAllBillable={handleSelectAllBillable}
-<<<<<<< HEAD
             onAddExpenses={handleAddExpenses}
-=======
             onClearSelection={clearAllFileSelection}
->>>>>>> 32693cab7b9956e6a71c81e09d2970768c4b9f06
           />
         ) : null}
 
@@ -751,71 +736,17 @@ export default function DealerBillingStudioPage() {
         ) : null}
       </div>
 
-<<<<<<< HEAD
       {studioMode === 'new' ? (
         <div className="crm-billing-footer">
           {step > 1 ? (
-=======
-      <div className="crm-billing-footer">
-        {studioMode === 'new' && step > 1 ? (
-          <button
-            type="button"
-            className="crm-btn crm-btn--secondary"
-            onClick={() => {
-              if (step === 2) {
-                filesRequestRef.current?.abort();
-                billingAutoSelectPendingRef.current = false;
-                setDealerFiles([]);
-                setBillableTotal(0);
-                setSelectedFileIds(new Set());
-                selectedFileCacheRef.current.clear();
-                setInvoiceLineFiles([]);
-                setFilesLoading(false);
-                setFiltersOpen(false);
-              }
-              if (step === 3) {
-                setInvoiceLineFiles([]);
-              }
-              setStep((s) => (s === 3 ? 2 : 1) as BillingWizardStep);
-            }}
-          >
-            <ArrowLeft size={16} />
-            Back
-          </button>
-        ) : (
-          <span />
-        )}
-
-        {studioMode === 'new' && step === 2 ? (
-          <button
-            type="button"
-            className="crm-btn crm-btn--primary"
-            disabled={!canNextStep2}
-            onClick={goToPreviewStep}
-            title={
-              canNextStep2
-                ? `${selectedFileIds.size} file(s) will be on this invoice`
-                : 'Select at least one billable file'
-            }
-          >
-            Continue ({selectedFileIds.size} file{selectedFileIds.size === 1 ? '' : 's'})
-            <ArrowRight size={16} />
-          </button>
-        ) : null}
-
-        {studioMode === 'new' && step === 3 ? (
-          <div className="crm-billing-footer-actions">
->>>>>>> 32693cab7b9956e6a71c81e09d2970768c4b9f06
             <button
               type="button"
               className="crm-btn crm-btn--secondary"
               onClick={() => {
                 if (step === 2) {
                   filesRequestRef.current?.abort();
+                  billingAutoSelectPendingRef.current = false;
                   setDealerFiles([]);
-                  setFilesPage(1);
-                  setFilesTotal(0);
-                  setFilesTotalPages(1);
                   setBillableTotal(0);
                   setSelectedFileIds(new Set());
                   selectedFileCacheRef.current.clear();
@@ -843,6 +774,11 @@ export default function DealerBillingStudioPage() {
               className="crm-btn crm-btn--primary"
               disabled={!canNextStep2}
               onClick={goToPreviewStep}
+              title={
+                canNextStep2
+                  ? `${selectedFileIds.size} file(s) will be on this invoice`
+                  : 'Select at least one billable file'
+              }
             >
               Continue to generate the invoice
               <ArrowRight size={16} />

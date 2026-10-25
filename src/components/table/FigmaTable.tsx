@@ -219,6 +219,7 @@ export type FigmaCellVariant =
   | 'fieldagent'
   | 'fieldagentname'
   | 'fieldagentmobile'
+  | 'fieldagentdesc'
   | 'fieldagentrto'
   | 'fieldagentaddress'
   | 'fieldagentactions'
@@ -238,7 +239,7 @@ export type FigmaCellVariant =
 const CELL_VARIANTS = new Set<string>([
   'check', 'font', 'license', 'scope', 'date', 'access', 'actions',
   'vehicle', 'client', 'work', 'dealer', 'filedate', 'filedocs', 'bill', 'filestatus', 'assignee',
-  'fieldagent', 'fieldagentname', 'fieldagentmobile', 'fieldagentrto', 'fieldagentaddress', 'fieldagentactions', 'fileactions',
+  'fieldagent', 'fieldagentname', 'fieldagentmobile', 'fieldagentdesc', 'fieldagentrto', 'fieldagentaddress', 'fieldagentactions', 'fileactions',
   'staffname', 'staffemail', 'staffuser', 'staffstatus', 'staffdate', 'stafflogin', 'staffactions',
   'worktypename', 'worktypedocs', 'worktypeactions',
 ]);

@@ -2496,11 +2496,10 @@ body {
     min-height: 0;
     max-height: 100%;
     flex: none;
-<<<<<<< HEAD
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    z-index: 6;
+    z-index: 30;
     box-shadow: -10px 0 40px rgba(17, 24, 39, 0.14);
 }
 
@@ -2525,16 +2524,12 @@ body {
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
     touch-action: pan-y;
-=======
-    z-index: 30;
-    box-shadow: -10px 0 40px rgba(17, 24, 39, 0.14);
 }
 
 .crm-page--files .crm-files-split--open .crm-billing-filter-backdrop {
     position: absolute;
     inset: 0;
     z-index: 20;
->>>>>>> 32693cab7b9956e6a71c81e09d2970768c4b9f06
 }
 
 .crm-filter-drawer--billing {
@@ -4167,6 +4162,20 @@ body {
 
 .figma-td--fieldagentmobile {
     flex: 0 1 120px;
+}
+
+.figma-td--fieldagentdesc {
+    flex: 1 1 140px;
+    min-width: 0;
+}
+
+.figma-td--fieldagentdesc .figma-td-text {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    white-space: pre-line;
+    line-height: 1.35;
 }
 
 .figma-td--fieldagentrto {

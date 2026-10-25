@@ -417,7 +417,6 @@ export default function FilesFilterDrawer({
       </header>
 
       <div className="crm-filter-drawer-body">
-<<<<<<< HEAD
           {/* Applied chips render above the table (File Records + Billing), not inside the drawer. */}
 
           {/* Billing only: File status first so it is visible without scrolling. */}
@@ -431,38 +430,6 @@ export default function FilesFilterDrawer({
                 searchPlaceholder="Search status"
               />
             </FilterSection>
-=======
-          {invoiceUi && appliedFilterChips.length > 0 ? (
-            <div className="crm-filter-drawer-applied">
-              <div className="crm-filter-drawer-applied-head">
-                <span className="crm-filter-drawer-applied-title">Selected filters</span>
-                {onClearAppliedFilters ? (
-                  <button
-                    type="button"
-                    className="crm-filter-drawer-applied-clear"
-                    onClick={onClearAppliedFilters}
-                  >
-                    Clear all
-                  </button>
-                ) : null}
-              </div>
-              <div className="crm-filter-drawer-applied-chips">
-                {appliedFilterChips.map((chip) => (
-                  <span key={chip.key} className="crm-filter-chip crm-filter-chip--drawer">
-                    {chip.label}
-                    <button
-                      type="button"
-                      className="crm-filter-chip-remove"
-                      onClick={chip.onRemove}
-                      aria-label={`Remove ${chip.label}`}
-                    >
-                      <X size={12} />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            </div>
->>>>>>> 32693cab7b9956e6a71c81e09d2970768c4b9f06
           ) : null}
 
           {isAdmin ? (
