@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Download, ExternalLink, X } from 'lucide-react';
+import { Download, ExternalLink, Printer, X } from 'lucide-react';
 import BillingBillPreviewPanel from './BillingBillPreviewPanel';
 import BillingPaymentPanel from './BillingPaymentPanel';
-import { downloadDealerBillPdf } from '@/lib/dealerBillingPdf';
+import { downloadDealerBillPdf, printDealerBillPdf } from '@/lib/dealerBillingPdf';
+import { shareDealerBillOnWhatsApp } from '@/lib/dealerInvoiceWhatsApp';
 import {
   billingDraftBalance,
   billingDraftTotalAmount,
@@ -17,6 +18,7 @@ import {
 import { displayInvoiceNumber } from '@/lib/taxInvoiceFormat';
 import { updateDealerBillingInvoiceReceived } from '@/services/dealerRegistryApi';
 import { getApiError } from '@/lib/apiError';
+import { CrmWhatsAppIcon } from '@/components/icons/CrmIcons';
 import type { StoredDealerInvoice } from '@/types/dealerBilling.types';
 
 interface BillingInvoiceReviewSheetProps {
@@ -33,13 +35,19 @@ export default function BillingInvoiceReviewSheet({
   onSaved,
 }: BillingInvoiceReviewSheetProps) {
   const [receivedInput, setReceivedInput] = useState('0');
+  const [savedReceivedAmount, setSavedReceivedAmount] = useState(0);
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (!open || !invoice) return;
-    setReceivedInput(String(invoice.receivedAmount ?? 0));
+    const received = Number(invoice.receivedAmount ?? 0);
+    setReceivedInput(String(received));
+    setSavedReceivedAmount(received);
     setPreviewModalOpen(false);
     setError('');
   }, [open, invoice]);
@@ -82,6 +90,8 @@ export default function BillingInvoiceReviewSheet({
   const balance = draft ? billingDraftBalance(draft) : 0;
   const receivedAmount = parseReceivedInput(receivedInput);
   const receivedValid = isReceivedAmountWithinTotal(receivedAmount, invoiceTotal);
+  const paymentSaved = receivedValid && receivedAmount === savedReceivedAmount;
+  const busy = saving || downloading || printing || sharing;
 
   useEffect(() => {
     if (!receivedValid) setPreviewModalOpen(false);
@@ -90,12 +100,20 @@ export default function BillingInvoiceReviewSheet({
   const status = invoice ? invoiceTrackingStatus(invoice) : 'Open';
   const generated = invoice ? formatInvoiceTrackingDateParts(invoice.generatedAt) : null;
 
-  const handleSaveAndDownload = async () => {
-    if (!invoice || !draft) return;
+  const assertReceivedValid = () => {
     if (!isReceivedAmountWithinTotal(parseReceivedInput(receivedInput), invoiceTotal)) {
       setError('Received amount cannot exceed invoice total.');
-      return;
+      return false;
     }
+    return true;
+  };
+
+  /** Persist received amount only — same as generation Save (no PDF, modal stays open). */
+  const handleSave = async () => {
+    if (!invoice || !draft) return;
+    if (!assertReceivedValid()) return;
+    if (paymentSaved) return;
+
     setSaving(true);
     setError('');
     try {
@@ -104,14 +122,66 @@ export default function BillingInvoiceReviewSheet({
         invoice.id,
         receivedAmount
       );
-      const nextDraft = storedInvoiceToDraft(updated);
-      await downloadDealerBillPdf(nextDraft);
+      setSavedReceivedAmount(Number(updated.receivedAmount ?? 0));
+      setReceivedInput(String(updated.receivedAmount ?? 0));
       onSaved(updated);
-      onClose();
     } catch (err) {
-      setError(getApiError(err, 'Could not save received amount or download PDF.'));
+      setError(getApiError(err, 'Could not save received amount.'));
     } finally {
       setSaving(false);
+    }
+  };
+
+  /** PDF download — only after received amount is saved. */
+  const handleDownload = async () => {
+    if (!invoice || !draft || !paymentSaved) return;
+    if (!assertReceivedValid()) return;
+
+    setDownloading(true);
+    setError('');
+    try {
+      await downloadDealerBillPdf(draft);
+    } catch (err) {
+      setError(getApiError(err, 'Could not download PDF.'));
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  /** Print — only after received amount is saved. */
+  const handlePrint = async () => {
+    if (!invoice || !draft || !paymentSaved) return;
+    if (!assertReceivedValid()) return;
+
+    const printWindow = window.open('about:blank', '_blank');
+    setPrinting(true);
+    setError('');
+    try {
+      await printDealerBillPdf(draft, printWindow);
+    } catch (err) {
+      printWindow?.close();
+      setError(getApiError(err, 'Could not print invoice.'));
+    } finally {
+      setPrinting(false);
+    }
+  };
+
+  /** WhatsApp share — only after received amount is saved. */
+  const handleShareWhatsApp = async () => {
+    if (!invoice || !draft || !paymentSaved) return;
+    if (!assertReceivedValid()) return;
+
+    setSharing(true);
+    setError('');
+    try {
+      const result = await shareDealerBillOnWhatsApp(draft);
+      if (!result.ok && result.reason !== 'Share cancelled') {
+        setError(result.reason);
+      }
+    } catch (err) {
+      setError(getApiError(err, 'Could not share on WhatsApp.'));
+    } finally {
+      setSharing(false);
     }
   };
 
@@ -188,26 +258,66 @@ export default function BillingInvoiceReviewSheet({
         </div>
 
         <footer className="crm-billing-review-sheet-foot">
-          <button type="button" className="crm-btn crm-btn--secondary" onClick={onClose} disabled={saving}>
+          <button
+            type="button"
+            className="crm-btn crm-btn--secondary"
+            onClick={onClose}
+            disabled={busy}
+          >
             Close
           </button>
           <button
             type="button"
-            className="crm-btn crm-btn--primary"
-            onClick={() => {
-              if (saving || !receivedValid) return;
-              void handleSaveAndDownload();
-            }}
-            disabled={saving || !receivedValid}
-            aria-disabled={saving || !receivedValid}
+            className="crm-btn crm-btn--whatsapp"
+            onClick={() => void handleShareWhatsApp()}
+            disabled={busy || !receivedValid || !paymentSaved}
             title={
-              !receivedValid
-                ? 'Received amount cannot be greater than the invoice total or balance due.'
-                : undefined
+              paymentSaved
+                ? 'Share invoice on WhatsApp'
+                : 'Save the received amount first, then share'
+            }
+          >
+            <CrmWhatsAppIcon />
+            {sharing ? 'Opening…' : 'Share'}
+          </button>
+          <button
+            type="button"
+            className="crm-btn crm-btn--secondary"
+            onClick={() => void handlePrint()}
+            disabled={busy || !receivedValid || !paymentSaved}
+            title={
+              paymentSaved ? 'Print invoice' : 'Save the received amount first, then print'
+            }
+          >
+            <Printer size={16} aria-hidden />
+            {printing ? 'Opening…' : 'Print'}
+          </button>
+          <button
+            type="button"
+            className="crm-btn crm-btn--secondary"
+            onClick={() => void handleSave()}
+            disabled={busy || !receivedValid || paymentSaved}
+            title={
+              paymentSaved
+                ? 'Received amount already saved'
+                : 'Save received amount to this invoice'
+            }
+          >
+            {saving ? 'Saving…' : paymentSaved ? 'Saved' : 'Save'}
+          </button>
+          <button
+            type="button"
+            className="crm-btn crm-btn--primary"
+            onClick={() => void handleDownload()}
+            disabled={busy || !receivedValid || !paymentSaved}
+            title={
+              paymentSaved
+                ? 'Download invoice PDF'
+                : 'Save the received amount first, then download'
             }
           >
             <Download size={16} aria-hidden />
-            {saving ? 'Saving…' : 'Save & download PDF'}
+            {downloading ? 'Downloading…' : 'Download'}
           </button>
         </footer>
       </div>

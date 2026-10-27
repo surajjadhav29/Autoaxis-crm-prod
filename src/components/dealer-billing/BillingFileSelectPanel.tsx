@@ -116,10 +116,15 @@ export default function BillingFileSelectPanel({
       ) : null}
       <div className="crm-files-main">
         <div className="crm-billing-files-topbar print:hidden">
-          <h1 className="crm-title crm-billing-files-page-title">
-            <span className="sm:hidden">Files</span>
-            <span className="hidden sm:inline">Select files</span>
-          </h1>
+          <div className="crm-billing-files-page-heading">
+            <h1 className="crm-title crm-billing-files-page-title">
+              <span className="sm:hidden">Files</span>
+              <span className="hidden sm:inline">Select files</span>
+            </h1>
+            <p className="crm-billing-files-dealer-name" title={dealer.name}>
+              {dealer.name}
+            </p>
+          </div>
 
           <div className="crm-billing-files-topbar-search">
             <div className="crm-search-wrap crm-search-wrap--expand crm-billing-files-search-wrap">

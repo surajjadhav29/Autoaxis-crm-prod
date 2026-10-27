@@ -282,17 +282,41 @@ export default function FieldAgentsPage() {
   return (
     <div className="crm-page crm-form-page crm-page--field-agents">
       <div className="crm-form-page-head">
-        <div className="crm-form-page-title-row crm-page-head-row">
+        <div className="crm-form-page-title-row crm-page-head-row crm-dealer-registry-toolbar-row">
           <div className="crm-page-head">
             <h1 className="crm-title">Field Agents</h1>
-            <p className="crm-page-subtitle m-0 text-sm text-[#667488]">
-              One entry per RTO — Field Agent 1 required, Field Agent 2 optional.
-            </p>
           </div>
-          <button type="button" onClick={handleCreateToggle} className="crm-btn crm-btn--primary">
-            {formMounted && formMode === 'create' ? <X size={16} /> : <MapPinned size={16} />}
-            {formMounted && formMode === 'create' ? 'Close' : 'Add Field Agent'}
-          </button>
+
+          <div className="crm-dealer-registry-search-wrap">
+            <div className="crm-search-wrap crm-search-wrap--expand crm-dealer-registry-search-field">
+              <Search size={16} className="crm-search-icon" aria-hidden />
+              <input
+                type="search"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Search by RTO or agent name…"
+                className="crm-search crm-dealer-registry-search-input"
+                aria-label="Search field agents"
+              />
+              {searchInput ? (
+                <button
+                  type="button"
+                  onClick={() => setSearchInput('')}
+                  className="crm-search-clear"
+                  aria-label="Clear search"
+                >
+                  <X size={14} />
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="crm-dealer-registry-toolbar-actions">
+            <button type="button" onClick={handleCreateToggle} className="crm-btn crm-btn--primary">
+              {formMounted && formMode === 'create' ? <X size={16} /> : <MapPinned size={16} />}
+              {formMounted && formMode === 'create' ? 'Close' : 'Add Field Agent'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -474,30 +498,6 @@ export default function FieldAgentsPage() {
             </div>
           </div>
         )}
-
-        <div className="mb-3 flex flex-wrap items-center gap-3">
-          <div className="crm-search-wrap relative min-w-[220px] max-w-md flex-1">
-            <Search size={16} className="crm-search-icon" aria-hidden />
-            <input
-              type="search"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search by RTO or agent name…"
-              className="crm-search w-full"
-              aria-label="Search field agents"
-            />
-            {searchInput ? (
-              <button
-                type="button"
-                className="crm-search-clear"
-                onClick={() => setSearchInput('')}
-                aria-label="Clear search"
-              >
-                <X size={14} />
-              </button>
-            ) : null}
-          </div>
-        </div>
 
         {error ? (
           <p className="m-0 rounded-lg border border-[#f5c2c7] bg-[#fff5f5] px-4 py-3 text-sm text-[#dc0024]">

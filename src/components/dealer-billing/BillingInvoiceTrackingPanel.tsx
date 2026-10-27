@@ -6,6 +6,7 @@ import {
   formatInvoiceTrackingDateParts,
   invoiceTrackingStatus,
   invoiceTrackingStatusClass,
+  sortInvoicesByPaymentStatus,
 } from '@/lib/billingInvoice';
 import type { StoredDealerInvoice } from '@/types/dealerBilling.types';
 import EmptyData from '../EmptyData';
@@ -66,7 +67,7 @@ export default function BillingInvoiceTrackingPanel({
         pageSize,
         q: debouncedQ || undefined,
       });
-      setInvoices(result.invoices);
+      setInvoices(sortInvoicesByPaymentStatus(result.invoices));
       setTotal(result.total);
       setTotalPages(result.totalPages);
       if (result.page !== page) setPage(result.page);
@@ -324,8 +325,9 @@ export default function BillingInvoiceTrackingPanel({
         open={Boolean(reviewInvoice)}
         invoice={reviewInvoice}
         onClose={() => setReviewInvoice(null)}
-        onSaved={() => {
-          setReviewInvoice(null);
+        onSaved={(updated) => {
+          // Keep manage sheet open after Save (like generation flow) so Download / Print / Share work next.
+          setReviewInvoice(updated);
           onInvoiceUpdated?.();
           void load();
         }}

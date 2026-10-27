@@ -236,7 +236,16 @@ export async function buildDealerBillPdfDoc(draft: BillingDraft): Promise<jsPDF>
     },
     margin: { left: summaryX },
     didParseCell: (data) => {
-      if (data.row.index === 1) {
+      const isTotalRow = data.row.index === 1;
+      const isPricingValue =
+        data.section === 'body' && data.column.index === 1 && data.row.index < 4;
+
+      if (isPricingValue) {
+        data.cell.styles.fontSize = 10;
+        data.cell.styles.fontStyle = 'bold';
+      }
+
+      if (isTotalRow) {
         data.cell.styles.fillColor = purple;
         data.cell.styles.textColor = [255, 255, 255];
         data.cell.styles.fontStyle = 'bold';
@@ -303,6 +312,61 @@ export async function getDealerBillPdfBlob(draft: BillingDraft): Promise<Blob> {
 export async function downloadDealerBillPdf(draft: BillingDraft): Promise<void> {
   const doc = await buildDealerBillPdfDoc(draft);
   doc.save(dealerInvoicePdfFilename(draft.dealer.name, draft.generatedAt));
+}
+
+/**
+ * Print invoice PDF.
+ * Prefer passing a Window opened synchronously in the click handler
+ * (`window.open('about:blank')`) so browsers do not treat it as a blocked pop-up
+ * after the async PDF build.
+ */
+export async function printDealerBillPdf(
+  draft: BillingDraft,
+  printWindow?: Window | null
+): Promise<void> {
+  const doc = await buildDealerBillPdfDoc(draft);
+  doc.autoPrint();
+  const blob = doc.output('blob');
+  const url = URL.createObjectURL(blob);
+
+  if (printWindow && !printWindow.closed) {
+    printWindow.location.href = url;
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    return;
+  }
+
+  // Fallback: hidden iframe — no pop-up window required.
+  await new Promise<void>((resolve, reject) => {
+    const iframe = document.createElement('iframe');
+    iframe.setAttribute('title', 'Print invoice');
+    iframe.style.cssText =
+      'position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;pointer-events:none;';
+
+    const cleanup = () => {
+      URL.revokeObjectURL(url);
+      iframe.remove();
+    };
+
+    iframe.onload = () => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+        resolve();
+      } catch (err) {
+        cleanup();
+        reject(err instanceof Error ? err : new Error('Could not print invoice'));
+        return;
+      }
+      window.setTimeout(cleanup, 60_000);
+    };
+    iframe.onerror = () => {
+      cleanup();
+      reject(new Error('Could not load invoice for print'));
+    };
+
+    document.body.appendChild(iframe);
+    iframe.src = url;
+  });
 }
 
 /** Same QR as PDF (for on-screen preview). */

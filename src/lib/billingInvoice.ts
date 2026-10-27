@@ -120,6 +120,32 @@ export function invoiceTrackingStatus(invoice: StoredDealerInvoice): InvoicePaym
   return 'Open';
 }
 
+const INVOICE_STATUS_SORT_RANK: Record<InvoicePaymentStatus, number> = {
+  Open: 0,
+  Partial: 1,
+  Paid: 2,
+};
+
+/** Open → Partial → Paid; within same status, newest generatedAt first. */
+export function compareInvoicesByPaymentStatus(
+  a: StoredDealerInvoice,
+  b: StoredDealerInvoice
+): number {
+  const rankDiff =
+    INVOICE_STATUS_SORT_RANK[invoiceTrackingStatus(a)] -
+    INVOICE_STATUS_SORT_RANK[invoiceTrackingStatus(b)];
+  if (rankDiff !== 0) return rankDiff;
+  const aTime = new Date(a.generatedAt || 0).getTime();
+  const bTime = new Date(b.generatedAt || 0).getTime();
+  return bTime - aTime;
+}
+
+export function sortInvoicesByPaymentStatus(
+  invoices: StoredDealerInvoice[]
+): StoredDealerInvoice[] {
+  return [...invoices].sort(compareInvoicesByPaymentStatus);
+}
+
 export function invoiceTrackingStatusClass(status: InvoicePaymentStatus): string {
   const base = 'figma-file-status figma-file-status--readonly crm-billing-invoice-status';
   switch (status) {

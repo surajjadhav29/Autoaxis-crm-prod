@@ -80,7 +80,7 @@ export async function invoiceSignaturePdfLayout(
   const dataUrl = await loadInvoiceSignatureDataUrl();
   const img = await loadHtmlImage(dataUrl);
   const aspect = (img.naturalWidth || 1) / (img.naturalHeight || 1);
-  const width = 118;
+  const width = 96;
   const height = width / aspect;
   const x = pageWidth - margin - width;
   const forY = footerTop + 28;

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Printer } from 'lucide-react';
 import { useAuth } from '@/features/auth';
 import {
   createDealerBillingInvoice,
@@ -18,7 +18,7 @@ import BillingFileSelectPanel from '../components/dealer-billing/BillingFileSele
 import BillingWizardRail from '../components/dealer-billing/BillingWizardRail';
 import BillingBillPreviewPanel from '../components/dealer-billing/BillingBillPreviewPanel';
 import BillingInvoiceTrackingPanel from '../components/dealer-billing/BillingInvoiceTrackingPanel';
-import { downloadDealerBillPdf } from '../lib/dealerBillingPdf';
+import { downloadDealerBillPdf, printDealerBillPdf } from '../lib/dealerBillingPdf';
 import { shareDealerBillOnWhatsApp } from '../lib/dealerInvoiceWhatsApp';
 import { CrmWhatsAppIcon } from '@/components/icons/CrmIcons';
 import { getApiError } from '../lib/apiError';
@@ -98,6 +98,7 @@ export default function DealerBillingStudioPage() {
   const [billNumber, setBillNumber] = useState('');
   const [savingInvoice, setSavingInvoice] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [printingPdf, setPrintingPdf] = useState(false);
   const [sharingWhatsApp, setSharingWhatsApp] = useState(false);
   const [dealerStepLoading, setDealerStepLoading] = useState(false);
   const filesRequestRef = useRef<AbortController | null>(null);
@@ -578,7 +579,7 @@ export default function DealerBillingStudioPage() {
   };
 
   const invoiceSaved = Boolean(activeInvoiceId);
-  const step3Busy = savingInvoice || downloadingPdf || sharingWhatsApp;
+  const step3Busy = savingInvoice || downloadingPdf || printingPdf || sharingWhatsApp;
 
   /** Persist invoice only — no PDF. Disables Save once done; enables Download. */
   const handleSaveInvoice = async () => {
@@ -616,6 +617,31 @@ export default function DealerBillingStudioPage() {
       showToast(getApiError(err, 'Could not download PDF'), 'error');
     } finally {
       setDownloadingPdf(false);
+    }
+  };
+
+  /** Print invoice PDF — only after the invoice is saved. */
+  const handlePrintPdf = async () => {
+    const draft = resolveBillingDraft();
+    if (!draft || !selectedDealer || !activeInvoiceIdRef.current) return;
+
+    // Open during the click gesture so the browser allows the print tab after PDF builds.
+    const printWindow = window.open('about:blank', '_blank');
+
+    setPrintingPdf(true);
+    try {
+      await printDealerBillPdf(
+        {
+          ...draft,
+          invoiceId: activeInvoiceIdRef.current,
+        },
+        printWindow
+      );
+    } catch (err) {
+      printWindow?.close();
+      showToast(getApiError(err, 'Could not print invoice'), 'error');
+    } finally {
+      setPrintingPdf(false);
     }
   };
 
@@ -820,6 +846,20 @@ export default function DealerBillingStudioPage() {
               >
                 <CrmWhatsAppIcon />
                 {sharingWhatsApp ? 'Opening…' : 'Share on WhatsApp'}
+              </button>
+              <button
+                type="button"
+                className="crm-btn crm-btn--secondary"
+                onClick={() => void handlePrintPdf()}
+                disabled={step3Busy || !billingDraft || !invoiceSaved}
+                title={
+                  invoiceSaved
+                    ? 'Print invoice'
+                    : 'Save the invoice first, then print'
+                }
+              >
+                <Printer size={16} aria-hidden />
+                {printingPdf ? 'Opening…' : 'Print'}
               </button>
               <button
                 type="button"
