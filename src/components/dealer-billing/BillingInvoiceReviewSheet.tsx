@@ -129,10 +129,11 @@ export default function BillingInvoiceReviewSheet({
         balanceAmount: Math.max(0, invoiceTotal - receivedAmount),
       })
     : 'Open';
+  const pricingLocked = status === 'Paid';
   const generated = invoice ? formatInvoiceTrackingDateParts(invoice.generatedAt) : null;
 
   const handleOpenPricing = async (fileId: string) => {
-    if (!fileId || busy) return;
+    if (!fileId || busy || pricingLocked) return;
     setOpeningExpenses(true);
     setError('');
     try {
@@ -150,7 +151,7 @@ export default function BillingInvoiceReviewSheet({
    * from the new Extra/Deal split — same bill number.
    */
   const handleSaveExpenses = async (expenses: FileExpenses, _paymentDone: boolean) => {
-    if (!invoice || !expenseFile) return;
+    if (!invoice || !expenseFile || pricingLocked) return;
     setSavingExpenses(true);
     setError('');
     try {
@@ -300,8 +301,9 @@ export default function BillingInvoiceReviewSheet({
               <div className="crm-billing-review-edit-lines-head">
                 <h3 className="crm-billing-review-edit-lines-title">Edit file pricing</h3>
                 <p className="crm-billing-review-edit-lines-hint">
-                  Click <strong>+</strong> Edit pricing on a file (same popup as File Records). Save
-                  updates that file and this invoice — same bill number.
+                  {pricingLocked
+                    ? 'This invoice is Paid — pricing cannot be edited.'
+                    : 'Click + Edit pricing on a file (same popup as File Records). Save updates that file and this invoice — same bill number.'}
                 </p>
               </div>
               <ul className="crm-billing-review-edit-lines-list">
@@ -330,9 +332,13 @@ export default function BillingInvoiceReviewSheet({
                           <button
                             type="button"
                             className="crm-btn crm-btn--secondary crm-btn--compact"
-                            disabled={busy}
+                            disabled={busy || pricingLocked}
                             onClick={() => void handleOpenPricing(fileId)}
-                            title="Open pricing (same as File Records +)"
+                            title={
+                              pricingLocked
+                                ? 'Paid invoice — pricing is locked'
+                                : 'Open pricing (same as File Records +)'
+                            }
                           >
                             <Plus size={16} aria-hidden />
                             Edit pricing
@@ -508,6 +514,7 @@ export default function BillingInvoiceReviewSheet({
         file={expenseFile}
         open={Boolean(expenseFile)}
         elevated
+        hidePaymentStatus
         onClose={() => {
           if (savingExpenses) return;
           setExpenseFile(null);

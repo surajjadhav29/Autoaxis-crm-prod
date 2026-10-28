@@ -67,6 +67,8 @@ interface ExpenseModalProps {
   saving?: boolean;
   /** Stack above billing review drawers (z-index 200+). */
   elevated?: boolean;
+  /** Invoice history edit — hide Paid/Unpaid; keep paymentDone unchanged. */
+  hidePaymentStatus?: boolean;
 }
 
 export default function ExpenseModal({
@@ -76,6 +78,7 @@ export default function ExpenseModal({
   onSave,
   saving,
   elevated = false,
+  hidePaymentStatus = false,
 }: ExpenseModalProps) {
   const { isAdmin } = useAuth();
   const fields = isAdmin ? ADMIN_FIELDS : STAFF_FIELDS;
@@ -167,7 +170,13 @@ export default function ExpenseModal({
       // Staff cannot edit Set Deal — keep existing value so it is not wiped to 0
       setDeal: isAdmin ? parseFloat(values.setDeal) || 0 : existingSetDeal,
     };
-    onSave(payload, isAdmin ? paymentDone : Boolean(file.paymentDone));
+    // Invoice-history edit must not toggle Paid/Unpaid from this popup.
+    const nextPaymentDone = hidePaymentStatus
+      ? Boolean(file.paymentDone)
+      : isAdmin
+        ? paymentDone
+        : Boolean(file.paymentDone);
+    onSave(payload, nextPaymentDone);
   };
 
   return (
@@ -268,41 +277,43 @@ export default function ExpenseModal({
               </button>
             ) : null}
 
-            {isAdmin ? (
-              <div className="mt-5 flex flex-col gap-2">
-                <span className="text-[13px] font-medium text-[#3d4654]">Payment status</span>
-                <div className="flex flex-wrap gap-4">
-                  <label className="flex cursor-pointer items-center gap-2 text-sm text-[#1e242c]">
-                    <input
-                      type="radio"
-                      name="paymentDone"
-                      checked={paymentDone === true}
-                      onChange={() => setPaymentDone(true)}
-                      className="h-4 w-4 accent-[#1a73e8]"
-                    />
-                    <span>Paid</span>
-                  </label>
-                  <label className="flex cursor-pointer items-center gap-2 text-sm text-[#1e242c]">
-                    <input
-                      type="radio"
-                      name="paymentDone"
-                      checked={paymentDone === false}
-                      onChange={() => setPaymentDone(false)}
-                      className="h-4 w-4 accent-[#1a73e8]"
-                    />
-                    <span>Unpaid</span>
-                  </label>
+            {!hidePaymentStatus ? (
+              isAdmin ? (
+                <div className="mt-5 flex flex-col gap-2">
+                  <span className="text-[13px] font-medium text-[#3d4654]">Payment status</span>
+                  <div className="flex flex-wrap gap-4">
+                    <label className="flex cursor-pointer items-center gap-2 text-sm text-[#1e242c]">
+                      <input
+                        type="radio"
+                        name="paymentDone"
+                        checked={paymentDone === true}
+                        onChange={() => setPaymentDone(true)}
+                        className="h-4 w-4 accent-[#1a73e8]"
+                      />
+                      <span>Paid</span>
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-2 text-sm text-[#1e242c]">
+                      <input
+                        type="radio"
+                        name="paymentDone"
+                        checked={paymentDone === false}
+                        onChange={() => setPaymentDone(false)}
+                        className="h-4 w-4 accent-[#1a73e8]"
+                      />
+                      <span>Unpaid</span>
+                    </label>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <div className="mt-5 text-sm text-[#576579]">
-                Payment status:{' '}
-                <strong className="font-medium text-[#1e242c]">
-                  {paymentDone ? 'Paid' : 'Unpaid'}
-                </strong>
-                <span className="mt-1 block text-xs">Only an admin can change payment status.</span>
-              </div>
-            )}
+              ) : (
+                <div className="mt-5 text-sm text-[#576579]">
+                  Payment status:{' '}
+                  <strong className="font-medium text-[#1e242c]">
+                    {paymentDone ? 'Paid' : 'Unpaid'}
+                  </strong>
+                  <span className="mt-1 block text-xs">Only an admin can change payment status.</span>
+                </div>
+              )
+            ) : null}
 
             <div className="crm-expense-total">
               <span>Total</span>
