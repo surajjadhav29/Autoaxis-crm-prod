@@ -733,7 +733,7 @@ export default function DealerBillingStudioPage() {
             onLoadError={(message) => showToast(message, 'error')}
             onInvoiceUpdated={() => {
               setTrackingRefreshKey((k) => k + 1);
-              showToast('Invoice updated');
+              showToast('Invoice updated. File amounts synced.');
             }}
           />
         ) : null}

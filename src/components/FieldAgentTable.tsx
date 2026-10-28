@@ -94,7 +94,7 @@ export default function FieldAgentTable({
                 <FigmaSortHeader label="Mobile 1" sortable={false} />
               </FigmaCell>
               <FigmaCell variant="fieldagentdesc">
-                <FigmaSortHeader label="Description 1" sortable={false} />
+                <FigmaSortHeader label="Address 1" sortable={false} />
               </FigmaCell>
               <FigmaCell variant="fieldagentname">
                 <FigmaSortHeader label="Field Agent 2" sortable={false} />
@@ -103,7 +103,7 @@ export default function FieldAgentTable({
                 <FigmaSortHeader label="Mobile 2" sortable={false} />
               </FigmaCell>
               <FigmaCell variant="fieldagentdesc">
-                <FigmaSortHeader label="Description 2" sortable={false} />
+                <FigmaSortHeader label="Address 2" sortable={false} />
               </FigmaCell>
               <FigmaCell variant="fieldagentactions">
                 <FigmaSortHeader label="Actions" sortable={false} />

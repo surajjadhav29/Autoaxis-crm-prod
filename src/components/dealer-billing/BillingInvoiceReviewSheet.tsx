@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Download, ExternalLink, Printer, X } from 'lucide-react';
+import { Download, ExternalLink, Plus, Printer, X } from 'lucide-react';
 import BillingBillPreviewPanel from './BillingBillPreviewPanel';
 import BillingPaymentPanel from './BillingPaymentPanel';
+import ExpenseModal from '../ExpenseModal';
 import { downloadDealerBillPdf, printDealerBillPdf } from '@/lib/dealerBillingPdf';
 import { shareDealerBillOnWhatsApp } from '@/lib/dealerInvoiceWhatsApp';
 import {
   billingDraftBalance,
-  billingDraftTotalAmount,
   formatInvoiceTrackingDateParts,
   invoiceTrackingStatus,
   invoiceTrackingStatusClass,
@@ -15,11 +15,15 @@ import {
   parseReceivedInput,
   storedInvoiceToDraft,
 } from '@/lib/billingInvoice';
-import { displayInvoiceNumber } from '@/lib/taxInvoiceFormat';
-import { updateDealerBillingInvoiceReceived } from '@/services/dealerRegistryApi';
+import { billingLineFromFileRecord, invoiceLineAmountColumns } from '@/lib/fileExpenseSplit';
+import { displayInvoiceNumber, formatTaxInvoiceRs } from '@/lib/taxInvoiceFormat';
+import { updateDealerBillingInvoice } from '@/services/dealerRegistryApi';
+import { fetchFileById, updateFileExpenses } from '@/services/fileService';
 import { getApiError } from '@/lib/apiError';
+import { useAuth } from '@/features/auth';
 import { CrmWhatsAppIcon } from '@/components/icons/CrmIcons';
-import type { StoredDealerInvoice } from '@/types/dealerBilling.types';
+import type { BillingLineItem, StoredDealerInvoice } from '@/types/dealerBilling.types';
+import type { FileExpenses, FileRecord } from '@/types/file.types';
 
 interface BillingInvoiceReviewSheetProps {
   open: boolean;
@@ -28,15 +32,26 @@ interface BillingInvoiceReviewSheetProps {
   onSaved: (invoice: StoredDealerInvoice) => void;
 }
 
+function lineLabel(line: BillingLineItem): string {
+  return (
+    [line.vehicleNo, line.workType, line.fileNumber].filter(Boolean).join(' · ') ||
+    String(line.fileId || '')
+  );
+}
+
 export default function BillingInvoiceReviewSheet({
   open,
   invoice,
   onClose,
   onSaved,
 }: BillingInvoiceReviewSheetProps) {
+  const { user } = useAuth();
   const [receivedInput, setReceivedInput] = useState('0');
   const [savedReceivedAmount, setSavedReceivedAmount] = useState(0);
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [expenseFile, setExpenseFile] = useState<FileRecord | null>(null);
+  const [openingExpenses, setOpeningExpenses] = useState(false);
+  const [savingExpenses, setSavingExpenses] = useState(false);
   const [saving, setSaving] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [printing, setPrinting] = useState(false);
@@ -49,6 +64,7 @@ export default function BillingInvoiceReviewSheet({
     setReceivedInput(String(received));
     setSavedReceivedAmount(received);
     setPreviewModalOpen(false);
+    setExpenseFile(null);
     setError('');
   }, [open, invoice]);
 
@@ -65,6 +81,7 @@ export default function BillingInvoiceReviewSheet({
     if (!open) return undefined;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
+      if (expenseFile) return;
       if (previewModalOpen) {
         setPreviewModalOpen(false);
         return;
@@ -73,55 +90,115 @@ export default function BillingInvoiceReviewSheet({
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [open, onClose, previewModalOpen]);
+  }, [open, onClose, previewModalOpen, expenseFile]);
 
+  const invoiceLines = invoice?.lines || [];
   const invoiceTotal = useMemo(
-    () => (invoice ? billingDraftTotalAmount(storedInvoiceToDraft(invoice)) : 0),
-    [invoice]
+    () => invoiceLines.reduce((sum, line) => sum + (Number(line.amount) || 0), 0),
+    [invoiceLines]
   );
+
+  const receivedAmount = parseReceivedInput(receivedInput);
+  const receivedDirty = receivedAmount !== savedReceivedAmount;
+  const receivedValid = isReceivedAmountWithinTotal(receivedAmount, invoiceTotal);
+  const canSaveReceived = receivedDirty && receivedValid;
 
   const draft = useMemo(() => {
     if (!invoice) return null;
-    const base = storedInvoiceToDraft(invoice);
-    return { ...base, receivedAmount: parseReceivedInput(receivedInput) };
-  }, [invoice, receivedInput]);
+    return storedInvoiceToDraft({
+      ...invoice,
+      totalAmount: invoiceTotal,
+      receivedAmount,
+      balanceAmount: Math.max(0, invoiceTotal - receivedAmount),
+    });
+  }, [invoice, invoiceTotal, receivedAmount]);
 
-  const total = invoiceTotal;
   const balance = draft ? billingDraftBalance(draft) : 0;
-  const receivedAmount = parseReceivedInput(receivedInput);
-  const receivedValid = isReceivedAmountWithinTotal(receivedAmount, invoiceTotal);
-  const paymentSaved = receivedValid && receivedAmount === savedReceivedAmount;
-  const busy = saving || downloading || printing || sharing;
+  const busy = saving || downloading || printing || sharing || openingExpenses || savingExpenses;
+  const changesSaved = !receivedDirty;
 
   useEffect(() => {
     if (!receivedValid) setPreviewModalOpen(false);
   }, [receivedValid]);
 
-  const status = invoice ? invoiceTrackingStatus(invoice) : 'Open';
+  const status = invoice
+    ? invoiceTrackingStatus({
+        ...invoice,
+        totalAmount: invoiceTotal,
+        receivedAmount,
+        balanceAmount: Math.max(0, invoiceTotal - receivedAmount),
+      })
+    : 'Open';
   const generated = invoice ? formatInvoiceTrackingDateParts(invoice.generatedAt) : null;
 
-  const assertReceivedValid = () => {
-    if (!isReceivedAmountWithinTotal(parseReceivedInput(receivedInput), invoiceTotal)) {
-      setError('Received amount cannot exceed invoice total.');
-      return false;
+  const handleOpenPricing = async (fileId: string) => {
+    if (!fileId || busy) return;
+    setOpeningExpenses(true);
+    setError('');
+    try {
+      const file = await fetchFileById(fileId, user);
+      setExpenseFile(file);
+    } catch (err) {
+      setError(getApiError(err, 'Could not open file pricing.'));
+    } finally {
+      setOpeningExpenses(false);
     }
-    return true;
   };
 
-  /** Persist received amount only — same as generation Save (no PDF, modal stays open). */
-  const handleSave = async () => {
-    if (!invoice || !draft) return;
-    if (!assertReceivedValid()) return;
-    if (paymentSaved) return;
+  /**
+   * Same popup as File Records (+). Save updates the file, then refreshes this invoice line
+   * from the new Extra/Deal split — same bill number.
+   */
+  const handleSaveExpenses = async (expenses: FileExpenses, _paymentDone: boolean) => {
+    if (!invoice || !expenseFile) return;
+    setSavingExpenses(true);
+    setError('');
+    try {
+      // Keep file billed on this invoice (do not flip to Unpaid from this popup).
+      const result = await updateFileExpenses(expenseFile.id, expenses, user, true);
+      const saved =
+        result && typeof result === 'object' && 'file' in result
+          ? (result.file as FileRecord)
+          : result && typeof result === 'object' && 'id' in (result as object)
+            ? (result as FileRecord)
+            : null;
+      if (!saved?.id) {
+        throw new Error('File save returned an incomplete response');
+      }
 
+      const updatedLine = billingLineFromFileRecord(saved);
+      const nextLines = (invoice.lines || []).map((line) =>
+        String(line.fileId) === String(saved.id) ? { ...line, ...updatedLine } : line
+      );
+
+      const updated = await updateDealerBillingInvoice(invoice.dealerId, invoice.id, {
+        receivedAmount,
+        lines: nextLines.map((line) => ({
+          fileId: String(line.fileId),
+          extraAmount: Number(line.extraAmount) || 0,
+          dealAmount: Number(line.dealAmount) || 0,
+        })),
+      });
+
+      setSavedReceivedAmount(Number(updated.receivedAmount ?? 0));
+      setReceivedInput(String(updated.receivedAmount ?? 0));
+      setExpenseFile(null);
+      onSaved(updated);
+    } catch (err) {
+      setError(getApiError(err, 'Could not update pricing on file and invoice.'));
+    } finally {
+      setSavingExpenses(false);
+    }
+  };
+
+  const handleSaveReceived = async () => {
+    if (!invoice || !draft || !canSaveReceived) return;
     setSaving(true);
     setError('');
     try {
-      const updated = await updateDealerBillingInvoiceReceived(
-        invoice.dealerId,
-        invoice.id,
-        receivedAmount
-      );
+      const updated = await updateDealerBillingInvoice(invoice.dealerId, invoice.id, {
+        receivedAmount,
+      });
       setSavedReceivedAmount(Number(updated.receivedAmount ?? 0));
       setReceivedInput(String(updated.receivedAmount ?? 0));
       onSaved(updated);
@@ -132,11 +209,8 @@ export default function BillingInvoiceReviewSheet({
     }
   };
 
-  /** PDF download — only after received amount is saved. */
   const handleDownload = async () => {
-    if (!invoice || !draft || !paymentSaved) return;
-    if (!assertReceivedValid()) return;
-
+    if (!invoice || !draft || !changesSaved) return;
     setDownloading(true);
     setError('');
     try {
@@ -148,11 +222,8 @@ export default function BillingInvoiceReviewSheet({
     }
   };
 
-  /** Print — only after received amount is saved. */
   const handlePrint = async () => {
-    if (!invoice || !draft || !paymentSaved) return;
-    if (!assertReceivedValid()) return;
-
+    if (!invoice || !draft || !changesSaved) return;
     const printWindow = window.open('about:blank', '_blank');
     setPrinting(true);
     setError('');
@@ -166,11 +237,8 @@ export default function BillingInvoiceReviewSheet({
     }
   };
 
-  /** WhatsApp share — only after received amount is saved. */
   const handleShareWhatsApp = async () => {
-    if (!invoice || !draft || !paymentSaved) return;
-    if (!assertReceivedValid()) return;
-
+    if (!invoice || !draft || !changesSaved) return;
     setSharing(true);
     setError('');
     try {
@@ -227,11 +295,68 @@ export default function BillingInvoiceReviewSheet({
             <span className={invoiceTrackingStatusClass(status)}>{status}</span>
           </div>
 
+          {invoiceLines.length ? (
+            <section className="crm-billing-review-edit-lines" aria-label="Edit file pricing">
+              <div className="crm-billing-review-edit-lines-head">
+                <h3 className="crm-billing-review-edit-lines-title">Edit file pricing</h3>
+                <p className="crm-billing-review-edit-lines-hint">
+                  Click <strong>+</strong> Edit pricing on a file (same popup as File Records). Save
+                  updates that file and this invoice — same bill number.
+                </p>
+              </div>
+              <ul className="crm-billing-review-edit-lines-list">
+                {invoiceLines.map((line) => {
+                  const fileId = String(line.fileId || '');
+                  if (!fileId) return null;
+                  const cols = invoiceLineAmountColumns(line);
+                  const label = lineLabel(line);
+                  return (
+                    <li key={fileId} className="crm-billing-review-edit-line">
+                      <div className="crm-billing-review-edit-line-row">
+                        <div className="crm-billing-review-edit-line-meta">
+                          <p className="crm-billing-review-edit-line-label" title={label}>
+                            {label}
+                          </p>
+                          <p className="crm-billing-review-edit-line-split">
+                            Extra {formatTaxInvoiceRs(cols.extraAmount ?? 0)}
+                            {' · '}
+                            Deal {formatTaxInvoiceRs(cols.dealAmount ?? 0)}
+                          </p>
+                        </div>
+                        <div className="crm-billing-review-edit-line-actions">
+                          <strong className="crm-billing-review-edit-line-amount">
+                            {formatTaxInvoiceRs(cols.total)}
+                          </strong>
+                          <button
+                            type="button"
+                            className="crm-btn crm-btn--secondary crm-btn--compact"
+                            disabled={busy}
+                            onClick={() => void handleOpenPricing(fileId)}
+                            title="Open pricing (same as File Records +)"
+                          >
+                            <Plus size={16} aria-hidden />
+                            Edit pricing
+                          </button>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+              <p className="crm-billing-review-edit-invoice-total">
+                Invoice total <strong>{formatTaxInvoiceRs(invoiceTotal)}</strong>
+              </p>
+            </section>
+          ) : null}
+
           <BillingPaymentPanel
             id="billing-review-received"
-            total={total}
+            total={invoiceTotal}
             receivedInput={receivedInput}
-            onReceivedInputChange={setReceivedInput}
+            onReceivedInputChange={(value) => {
+              setReceivedInput(value);
+              setError('');
+            }}
             balance={balance}
             error={error}
             compact
@@ -270,11 +395,11 @@ export default function BillingInvoiceReviewSheet({
             type="button"
             className="crm-btn crm-btn--whatsapp"
             onClick={() => void handleShareWhatsApp()}
-            disabled={busy || !receivedValid || !paymentSaved}
+            disabled={busy || !changesSaved || !receivedValid}
             title={
-              paymentSaved
+              changesSaved
                 ? 'Share invoice on WhatsApp'
-                : 'Save the received amount first, then share'
+                : 'Save received amount first, then share'
             }
           >
             <CrmWhatsAppIcon />
@@ -284,10 +409,8 @@ export default function BillingInvoiceReviewSheet({
             type="button"
             className="crm-btn crm-btn--secondary"
             onClick={() => void handlePrint()}
-            disabled={busy || !receivedValid || !paymentSaved}
-            title={
-              paymentSaved ? 'Print invoice' : 'Save the received amount first, then print'
-            }
+            disabled={busy || !changesSaved || !receivedValid}
+            title={changesSaved ? 'Print invoice' : 'Save received amount first, then print'}
           >
             <Printer size={16} aria-hidden />
             {printing ? 'Opening…' : 'Print'}
@@ -295,25 +418,27 @@ export default function BillingInvoiceReviewSheet({
           <button
             type="button"
             className="crm-btn crm-btn--secondary"
-            onClick={() => void handleSave()}
-            disabled={busy || !receivedValid || paymentSaved}
+            onClick={() => void handleSaveReceived()}
+            disabled={busy || !canSaveReceived}
             title={
-              paymentSaved
-                ? 'Received amount already saved'
-                : 'Save received amount to this invoice'
+              canSaveReceived
+                ? 'Save received amount'
+                : changesSaved
+                  ? 'No received-amount changes'
+                  : 'Fix received amount before saving'
             }
           >
-            {saving ? 'Saving…' : paymentSaved ? 'Saved' : 'Save'}
+            {saving ? 'Saving…' : changesSaved ? 'Saved' : 'Save'}
           </button>
           <button
             type="button"
             className="crm-btn crm-btn--primary"
             onClick={() => void handleDownload()}
-            disabled={busy || !receivedValid || !paymentSaved}
+            disabled={busy || !changesSaved || !receivedValid}
             title={
-              paymentSaved
+              changesSaved
                 ? 'Download invoice PDF'
-                : 'Save the received amount first, then download'
+                : 'Save received amount first, then download'
             }
           >
             <Download size={16} aria-hidden />
@@ -379,6 +504,19 @@ export default function BillingInvoiceReviewSheet({
     <>
       {sheet}
       {previewModal}
+      <ExpenseModal
+        file={expenseFile}
+        open={Boolean(expenseFile)}
+        elevated
+        onClose={() => {
+          if (savingExpenses) return;
+          setExpenseFile(null);
+        }}
+        onSave={(expenses, paymentDone) => {
+          void handleSaveExpenses(expenses, paymentDone);
+        }}
+        saving={savingExpenses}
+      />
     </>,
     document.body
   );

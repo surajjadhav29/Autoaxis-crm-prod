@@ -249,6 +249,7 @@ export const FILE_UPLOAD_EXCEL_COLUMNS = [
   { header: 'Urgent', key: 'urgent', width: 12 },
   { header: 'CNG Adjustment', key: 'cngAdjustment', width: 14 },
   { header: 'Mob No. Update', key: 'mobNoUpdate', width: 14 },
+  { header: 'Late Invoice', key: 'lateInvoice', width: 14 },
   { header: 'Set Deal Amount', key: 'setDeal', width: 14 },
   { header: 'Payment Done', key: 'paymentDone', width: 14 },
 ];
@@ -316,6 +317,7 @@ export async function downloadExcelTemplate() {
     urgent: 0,
     cngAdjustment: 0,
     mobNoUpdate: 0,
+    lateInvoice: 0,
     setDeal: 2500,
     paymentDone: 'No',
   });
@@ -355,6 +357,7 @@ export async function downloadExcelTemplate() {
     'urgent',
     'cngAdjustment',
     'mobNoUpdate',
+    'lateInvoice',
     'setDeal',
   ].forEach((key) => {
     sheet.getColumn(key).numFmt = '#,##0.00';
@@ -486,6 +489,7 @@ export async function downloadFailedExcelRecords(errors = []) {
       urgent: data.urgent ?? 0,
       cngAdjustment: data.cngAdjustment ?? 0,
       mobNoUpdate: data.mobNoUpdate ?? 0,
+      lateInvoice: data.lateInvoice ?? 0,
       setDeal: data.setDeal ?? 0,
       paymentDone: data.paymentDone || 'No',
       errorReason: item.error || 'Unknown error',
@@ -598,6 +602,7 @@ const EXPORT_EXPENSE_COLUMNS = [
   { header: 'Urgent', key: 'urgent', width: 12 },
   { header: 'CNG Adjustment', key: 'cngAdjustment', width: 14 },
   { header: 'Mob No. Update', key: 'mobNoUpdate', width: 14 },
+  { header: 'Late Invoice', key: 'lateInvoice', width: 14 },
 ];
 
 const SET_DEAL_COLUMN = { header: 'Set Deal Amount', key: 'setDeal', width: 14 };
@@ -629,7 +634,7 @@ function expenseAmount(expenses, key) {
   return Number(expenses?.[key]) || 0;
 }
 
-/** Bill total from expense lines (includes CNG Adjustment + Mob No. Update). */
+/** Bill total from expense lines (incl. CNG Adjustment, Mob No. Update, Late Invoice). */
 function sumExportExpenses(expenses, isAdmin) {
   const exp = expenses || {};
   let sum = EXPORT_EXPENSE_COLUMNS.reduce((s, col) => s + expenseAmount(exp, col.key), 0);

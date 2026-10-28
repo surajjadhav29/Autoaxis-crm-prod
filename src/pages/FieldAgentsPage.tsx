@@ -363,7 +363,7 @@ export default function FieldAgentsPage() {
                           ) : (
                             <p className="m-0 text-[12px] text-[#667488]">
                               One table row per RTO. Agent 1 is required; Agent 2 is optional.
-                              Mobile and description are optional for both.
+                              Mobile and address are optional for both.
                             </p>
                           )}
                         </div>
@@ -403,13 +403,13 @@ export default function FieldAgentsPage() {
                         </div>
                         <div className="flex flex-col gap-1.5 sm:col-span-2">
                           <label className="text-[13px] font-medium text-[#3d4654]">
-                            Description 1{' '}
+                            Address 1{' '}
                             <span className="font-normal text-[#667488]">(optional)</span>
                           </label>
                           <textarea
                             name="description"
                             className={`${inputClass} min-h-[72px] resize-y py-2.5`}
-                            placeholder="Notes about agent 1"
+                            placeholder="Agent 1 address"
                             rows={2}
                             value={form.description}
                             onChange={(e) =>
@@ -455,13 +455,13 @@ export default function FieldAgentsPage() {
                         </div>
                         <div className="flex flex-col gap-1.5 sm:col-span-2">
                           <label className="text-[13px] font-medium text-[#3d4654]">
-                            Description 2{' '}
+                            Address 2{' '}
                             <span className="font-normal text-[#667488]">(optional)</span>
                           </label>
                           <textarea
                             name="description2"
                             className={`${inputClass} min-h-[72px] resize-y py-2.5`}
-                            placeholder="Notes about agent 2"
+                            placeholder="Agent 2 address"
                             rows={2}
                             value={form.description2}
                             onChange={(e) =>

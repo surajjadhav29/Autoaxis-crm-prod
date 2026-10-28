@@ -29,6 +29,7 @@ export interface FileExpenses {
   urgent?: number;
   cngAdjustment?: number;
   mobNoUpdate?: number;
+  lateInvoice?: number;
   setDeal?: number;
 }
 

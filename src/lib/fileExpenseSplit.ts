@@ -17,6 +17,7 @@ export const INVOICE_EXTRA_EXPENSE_KEYS: (keyof FileExpenses)[] = [
   'urgent',
   'cngAdjustment',
   'mobNoUpdate',
+  'lateInvoice',
 ];
 
 function parseMoney(value: unknown): number {

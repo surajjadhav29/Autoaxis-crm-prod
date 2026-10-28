@@ -193,6 +193,25 @@ export async function updateDealerBillingInvoiceReceived(dealerId, invoiceId, re
 }
 
 /**
+ * Update existing invoice received amount and/or line Extra/Deal (same bill number).
+ * File expenses/totalBill are saved via PUT /files/:id/expenses; this only updates the invoice snapshot.
+ * @param {string} dealerId
+ * @param {string} invoiceId
+ * @param {{ receivedAmount?: number, lines?: Array<{ fileId: string, extraAmount: number, dealAmount: number }> }} body
+ */
+export async function updateDealerBillingInvoice(dealerId, invoiceId, body = {}) {
+  const payload = {};
+  if (body.receivedAmount !== undefined) {
+    payload.receivedAmount = body.receivedAmount;
+  }
+  if (Array.isArray(body.lines)) {
+    payload.lines = body.lines;
+  }
+  const { data } = await api.patch(`/dealers/${dealerId}/invoices/${invoiceId}`, payload);
+  return data.invoice || data;
+}
+
+/**
  * @param {import('@/types/dealer.types').DealerRegistryFormValues} body
  */
 export async function createDealerRegistryEntry(body) {

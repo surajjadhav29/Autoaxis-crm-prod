@@ -25,6 +25,7 @@ const STAFF_FIELDS: ExpenseField[] = [
   { key: 'urgent', label: 'Urgent' },
   { key: 'cngAdjustment', label: 'CNG Adjustment' },
   { key: 'mobNoUpdate', label: 'Mob No. Update' },
+  { key: 'lateInvoice', label: 'Late Invoice' },
 ];
 
 const ADMIN_FIELDS: ExpenseField[] = [
@@ -54,6 +55,7 @@ const emptyExpenses = (): ExpenseFormValues => ({
   urgent: '',
   cngAdjustment: '',
   mobNoUpdate: '',
+  lateInvoice: '',
   setDeal: '',
 });
 
@@ -63,9 +65,18 @@ interface ExpenseModalProps {
   onClose: () => void;
   onSave: (expenses: FileExpenses, paymentDone: boolean) => void;
   saving?: boolean;
+  /** Stack above billing review drawers (z-index 200+). */
+  elevated?: boolean;
 }
 
-export default function ExpenseModal({ file, open, onClose, onSave, saving }: ExpenseModalProps) {
+export default function ExpenseModal({
+  file,
+  open,
+  onClose,
+  onSave,
+  saving,
+  elevated = false,
+}: ExpenseModalProps) {
   const { isAdmin } = useAuth();
   const fields = isAdmin ? ADMIN_FIELDS : STAFF_FIELDS;
   const [values, setValues] = useState<ExpenseFormValues>(emptyExpenses);
@@ -92,6 +103,7 @@ export default function ExpenseModal({ file, open, onClose, onSave, saving }: Ex
       urgent: exp.urgent != null ? String(exp.urgent) : '',
       cngAdjustment: exp.cngAdjustment != null ? String(exp.cngAdjustment) : '',
       mobNoUpdate: exp.mobNoUpdate != null ? String(exp.mobNoUpdate) : '',
+      lateInvoice: exp.lateInvoice != null ? String(exp.lateInvoice) : '',
       setDeal: exp.setDeal != null ? String(exp.setDeal) : '',
     });
     setPaymentDone(Boolean(file.paymentDone));
@@ -151,6 +163,7 @@ export default function ExpenseModal({ file, open, onClose, onSave, saving }: Ex
       urgent: parseFloat(values.urgent) || 0,
       cngAdjustment: parseFloat(values.cngAdjustment) || 0,
       mobNoUpdate: parseFloat(values.mobNoUpdate) || 0,
+      lateInvoice: parseFloat(values.lateInvoice) || 0,
       // Staff cannot edit Set Deal — keep existing value so it is not wiped to 0
       setDeal: isAdmin ? parseFloat(values.setDeal) || 0 : existingSetDeal,
     };
@@ -158,7 +171,10 @@ export default function ExpenseModal({ file, open, onClose, onSave, saving }: Ex
   };
 
   return (
-    <div className="crm-modal-backdrop crm-modal-backdrop--expense" onClick={onClose}>
+    <div
+      className={`crm-modal-backdrop crm-modal-backdrop--expense${elevated ? ' crm-modal-backdrop--elevated' : ''}`}
+      onClick={onClose}
+    >
       <div className="crm-modal crm-modal--expense" onClick={(e) => e.stopPropagation()}>
         <div className="crm-modal-head">
           <div>
@@ -227,18 +243,30 @@ export default function ExpenseModal({ file, open, onClose, onSave, saving }: Ex
             </div>
 
             <div className="crm-expense-values">
-              {fields.map(({ key, label }) => (
-                <button
-                  key={key}
-                  type="button"
-                  className={`crm-expense-value-row ${key === selectedKey ? 'crm-expense-value-row--active' : ''}`}
-                  onClick={() => chooseField(key)}
-                >
-                  <span>{label}</span>
-                  <strong>{shownAmount(values[key])}</strong>
-                </button>
-              ))}
+              {fields
+                .filter((field) => field.key !== 'setDeal')
+                .map(({ key, label }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`crm-expense-value-row${key === selectedKey ? ' crm-expense-value-row--active' : ''}`}
+                    onClick={() => chooseField(key)}
+                  >
+                    <span>{label}</span>
+                    <strong>{shownAmount(values[key])}</strong>
+                  </button>
+                ))}
             </div>
+            {isAdmin ? (
+              <button
+                type="button"
+                className={`crm-expense-value-row crm-expense-value-row--set-deal${selectedKey === 'setDeal' ? ' crm-expense-value-row--active' : ''}`}
+                onClick={() => chooseField('setDeal')}
+              >
+                <span>Set Deal Amount</span>
+                <strong>{shownAmount(values.setDeal)}</strong>
+              </button>
+            ) : null}
 
             {isAdmin ? (
               <div className="mt-5 flex flex-col gap-2">

@@ -11,6 +11,8 @@ interface ConfirmModalProps {
   confirmDisabled?: boolean;
   hideConfirm?: boolean;
   destructive?: boolean;
+  /** Stack above billing review drawers (z-index 200+). */
+  elevated?: boolean;
   onClose: () => void;
   onConfirm: () => void;
 }
@@ -25,6 +27,7 @@ export default function ConfirmModal({
   confirmDisabled = false,
   hideConfirm = false,
   destructive = false,
+  elevated = false,
   onClose,
   onConfirm,
 }: ConfirmModalProps) {
@@ -42,7 +45,11 @@ export default function ConfirmModal({
   if (!open) return null;
 
   return (
-    <div className="crm-modal-backdrop" onClick={onClose} role="presentation">
+    <div
+      className={`crm-modal-backdrop${elevated ? ' crm-modal-backdrop--elevated' : ''}`}
+      onClick={onClose}
+      role="presentation"
+    >
       <div
         className="crm-modal crm-modal--confirm"
         onClick={(e) => e.stopPropagation()}
