@@ -25,7 +25,7 @@ const STAFF_FIELDS: ExpenseField[] = [
   { key: 'urgent', label: 'Urgent' },
   { key: 'cngAdjustment', label: 'CNG Adjustment' },
   { key: 'mobNoUpdate', label: 'Mob No. Update' },
-  { key: 'lateInvoice', label: 'Late Invoice' },
+  { key: 'lateInvoice', label: 'LATE N.O.C' },
 ];
 
 const ADMIN_FIELDS: ExpenseField[] = [

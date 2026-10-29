@@ -136,7 +136,7 @@ const BILLING_LINES: { key: keyof FileExpenses; label: string; adminOnly?: boole
   { key: 'urgent', label: 'Urgent' },
   { key: 'cngAdjustment', label: 'CNG adjustment' },
   { key: 'mobNoUpdate', label: 'Mob no. update' },
-  { key: 'lateInvoice', label: 'Late invoice' },
+  { key: 'lateInvoice', label: 'LATE N.O.C' },
   { key: 'setDeal', label: 'Set deal', adminOnly: true },
 ];
 
